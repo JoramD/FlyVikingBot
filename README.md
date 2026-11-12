@@ -14,7 +14,7 @@ Discord bot for the FlyViking virtual airline, connecting [flyviking.net](https:
 **FSAirlines → Discord**
 - **Flight logs:** every flight completed in FSAirlines is posted to #flight-logs within about 2 minutes. It shows route, aircraft, block time, distance, landing rate and rating, and an @mention if the pilot is linked.
 - **Account linking:** members fill in *FSAirlines Pilot ID* and *Discord username* on their flyviking.net profile, and the bot links them automatically. Anything it can't verify, such as an unknown user, a name mismatch or an account that's already linked, goes to #system-messages with the member's profile link and Approve/Reject buttons.
-- **Rank roles:** linked members get the Discord role named after their FSAirlines rank (or its short name). It syncs hourly and right after linking. Ranks without a matching role are reported to #system-messages.
+- **Rank roles:** linked members get the Discord role named after their FSAirlines rank (or its short name). It syncs hourly and right after linking. Only the roles listed in `FSA_RANK_ROLES` are ever assigned or removed. Other ranks, such as Board of Directors, are left to staff.
 
 **Website → Discord** (via Invision Community webhooks)
 | IPS event | Discord |
@@ -86,7 +86,7 @@ Health check: `GET /health`.
 2. **Discord:**
    - Enable the **Server Members Intent** for the bot in the Discord Developer Portal (Bot → Privileged Gateway Intents). The bot won't start without it.
    - Create #flight-logs, and pick a staff channel for system messages.
-   - Create a role for each FSAirlines rank, named exactly after the rank (or its short name).
+   - Create a role for each FSAirlines rank that should be assigned automatically, named exactly after the rank (or its short name), and list them in `FSA_RANK_ROLES`.
    - Move the bot's role **above** those rank roles, and give it Manage Roles.
 3. Set `CHANNEL_FLIGHT_LOGS` and `CHANNEL_SYSTEM_MESSAGES` in `.env`, then run `docker compose up -d --build`.
 

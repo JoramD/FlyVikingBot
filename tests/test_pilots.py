@@ -145,24 +145,48 @@ async def test_find_discord_members_fallbacks(env):
     assert env.cog.find_discord_members(guild, "") == []
 
 
-async def test_set_rank_role_swaps_and_reports_missing_role(env):
-    cog = pc.Pilots(env.bot)  # real set_rank_role
-    env.fsa.ranks = AsyncMock(return_value=[Rank(1, "First Officer", "FO"), Rank(2, "Captain", None),
-                                            Rank(3, "Commander", None)])
-    roles = {11: "First Officer", 12: "Captain", 50: "Members"}
-    member = make_member(1, "joramd", roles=[11, 50])
+def fake_guild_member(roles, have):
+    member = make_member(1, "joramd", roles=have)
     member.guild = SimpleNamespace(
         roles=[SimpleNamespace(id=i, name=n, is_default=lambda: False, managed=False) for i, n in roles.items()],
         get_role=lambda i: SimpleNamespace(id=i, name=roles[i]) if i in roles else None,
     )
-    change = await cog.set_rank_role(member, 2)
-    member.remove_roles.assert_awaited_once()
-    assert [r.id for r in member.add_roles.await_args.args] == [12]
-    assert change == "<@1>: First Officer → Captain"
+    return member
 
-    assert await cog.set_rank_role(member, 3, profile_url="https://p/") is None
-    msg = env.bot.post_system_message.await_args.args[0]
-    assert "Commander" in msg and "https://p/" in msg
+
+RANK_ROLES = {11: "Trainee Pilot", 12: "First Officer", 13: "Senior First Officer", 14: "Cargo First Officer",
+              15: "Captain", 16: "Cargo Captain", 60: "Board of Directors", 50: "Members"}
+
+
+async def test_set_rank_role_swaps_roles(env):
+    cog = pc.Pilots(env.bot)  # real set_rank_role
+    env.fsa.ranks = AsyncMock(return_value=[Rank(1, "First Officer", "FO"), Rank(2, "Captain", None)])
+    member = fake_guild_member(RANK_ROLES, have=[12, 50])
+    change = await cog.set_rank_role(member, 2)
+    assert [r.id for r in member.remove_roles.await_args.args] == [12]
+    assert [r.id for r in member.add_roles.await_args.args] == [15]
+    assert change == "<@1>: First Officer → Captain"
+    env.bot.post_system_message.assert_not_awaited()
+
+
+async def test_board_ranks_are_never_assigned_or_reported(env):
+    cog = pc.Pilots(env.bot)
+    # An FSA rank that shares its name with a non-allowlisted Discord role
+    env.fsa.ranks = AsyncMock(return_value=[Rank(2, "Captain", None), Rank(9, "Board of Directors", "BOD")])
+    member = fake_guild_member(RANK_ROLES, have=[15, 50])
+    assert await cog.set_rank_role(member, 9) is None
+    member.add_roles.assert_not_awaited()
+    member.remove_roles.assert_not_awaited()  # keeps their existing rank role; staff handle board roles
+    env.bot.post_system_message.assert_not_awaited()
+
+
+async def test_missing_allowlisted_role_reported_once(env):
+    cog = pc.Pilots(env.bot)
+    env.fsa.ranks = AsyncMock(return_value=[Rank(2, "Captain", None)])
+    roles = {k: v for k, v in RANK_ROLES.items() if v != "Cargo Captain"}
+    member = fake_guild_member(roles, have=[])
+    await cog.set_rank_role(member, 2)
+    assert "'Cargo Captain'" in env.bot.post_system_message.await_args.args[0]
     env.bot.post_system_message.reset_mock()
-    await cog.set_rank_role(member, 3)
-    env.bot.post_system_message.assert_not_awaited()  # reported only once
+    await cog.set_rank_role(member, 2)
+    env.bot.post_system_message.assert_not_awaited()

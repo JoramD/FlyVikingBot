@@ -22,6 +22,11 @@ _LEGACY_KEYS = {
 }
 
 
+DEFAULT_RANK_ROLES = (
+    "Trainee Pilot,First Officer,Senior First Officer,Cargo First Officer,Captain,Cargo Captain"
+)
+
+
 class ConfigError(RuntimeError):
     pass
 
@@ -53,6 +58,7 @@ class Settings:
     ips_field_discord_name: int | None
     fsa_poll_seconds: int
     fsa_rank_sync_minutes: int
+    fsa_rank_roles: tuple[str, ...]  # the only Discord roles the bot may assign/remove for FSA ranks
 
     data_dir: Path
 
@@ -125,5 +131,8 @@ def load_settings(
         ips_field_discord_name=optional_int("IPS_FIELD_DISCORD_NAME"),
         fsa_poll_seconds=max(60, int(get("FSA_POLL_SECONDS", "120"))),
         fsa_rank_sync_minutes=max(5, int(get("FSA_RANK_SYNC_MINUTES", "60"))),
+        fsa_rank_roles=tuple(
+            name.strip() for name in get("FSA_RANK_ROLES", DEFAULT_RANK_ROLES).split(",") if name.strip()
+        ),
         data_dir=Path(get("DATA_DIR", "data")),
     )

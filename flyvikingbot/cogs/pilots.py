@@ -292,8 +292,24 @@ class Pilots(commands.Cog):
     # --- rank roles ---------------------------------------------------------------------------------------------------
 
     async def rank_role_map(self, guild: discord.Guild) -> tuple[dict[int, int | None], dict[int, str]]:
+        """Map FSA ranks to Discord roles, considering only the roles in FSA_RANK_ROLES.
+
+        Other roles (e.g. Board of Directors) are never assigned or removed by the bot,
+        even if an FSA rank happens to share their name.
+        """
         ranks = await self.bot.fsa.ranks()
-        roles = [lk.RoleRef(r.id, r.name) for r in guild.roles if not r.is_default() and not r.managed]
+        allowed = {lk.normalize(name): name for name in self.settings.fsa_rank_roles}
+        roles = [
+            lk.RoleRef(r.id, r.name)
+            for r in guild.roles
+            if not r.is_default() and not r.managed and lk.normalize(r.name) in allowed
+        ]
+        missing = allowed.keys() - {lk.normalize(r.name) for r in roles}
+        for key in sorted(missing):
+            await self.report_once(
+                f"rank-role-missing:{key}",
+                f"⚠️ Rank role '{allowed[key]}' is listed in FSA_RANK_ROLES but doesn't exist in Discord.",
+            )
         return lk.map_ranks_to_roles(ranks, roles), {r.id: r.name for r in ranks}
 
     async def set_rank_role(
@@ -313,14 +329,9 @@ class Pilots(commands.Cog):
         else:
             target = mapping.get(rank_id) if rank_id is not None else None
             if target is None:
-                rank_name = names.get(rank_id, f"#{rank_id}")
-                await self.report_once(
-                    f"rank-norole:{rank_id}",
-                    f"⚠️ FSAirlines rank **{rank_name}** has no matching Discord role, so {member.mention} "
-                    f"couldn't get a rank role. Create a role named '{rank_name}'. · {_profile_link(profile_url)}",
-                )
+                # Ranks without an automatic role (e.g. Board of Directors) are handled manually by staff
+                log.debug("FSA rank %s has no automatic role; leaving %s's roles alone", names.get(rank_id), member)
                 return None
-            await self.resolved(f"rank-norole:{rank_id}")
             to_add, to_remove = lk.role_changes((r.id for r in member.roles), rank_role_ids, target)
 
         if not to_add and not to_remove:
