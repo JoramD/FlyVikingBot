@@ -283,3 +283,18 @@ async def test_on_demand_lookup_permission_error_reported_once(env):
     await env.cog.link_from_website(SimpleNamespace(id=2, name="someone"))
     env.bot.post_system_message.assert_awaited_once()
     assert "GET /core/members" in env.bot.post_system_message.await_args.args[0]
+
+
+async def test_sync_rank_member_links_on_demand(env):
+    env.bot.website = SimpleNamespace(list_members=AsyncMock(return_value=[member_payload(name="Joram Davids")]))
+    interaction = MagicMock()
+    interaction.response.defer = AsyncMock()
+    interaction.followup.send = AsyncMock()
+    await env.cog.sync_rank.callback(env.cog, interaction, member=env.joram)
+    assert (await env.storage.link_by_discord(1, "fsa")).external_id == "100"
+    env.bot.website.list_members.assert_awaited_once()
+
+
+async def test_other_commands_do_not_look_up_links(env):
+    # Only /pilot and /sync_rank need link info; no global per-command hook exists
+    assert not hasattr(env.cog, "on_app_command_completion")

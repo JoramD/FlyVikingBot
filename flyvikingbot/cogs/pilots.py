@@ -655,7 +655,12 @@ class Pilots(commands.Cog):
                 return
             link = await self.bot.storage.link_by_discord(member.id, lk.SERVICE_FSA)
             if link is None:
+                # Their profile may have been filled in while the bot was offline: check the website now
+                link, note = await self.link_from_website(member)
+            if link is None:
                 msg = f"{member.mention} isn't linked to an FSAirlines pilot."
+                if note:
+                    msg += " Their website profile was found, but it's waiting for staff review in #system-messages."
                 await interaction.followup.send(msg, ephemeral=True)
                 return
             pilot = await self.bot.fsa.pilot(link.external_id)
