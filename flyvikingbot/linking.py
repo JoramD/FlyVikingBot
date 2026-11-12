@@ -74,6 +74,7 @@ class Decision:
     action: Action
     reasons: tuple[str, ...] = ()
     discord_id: int | None = None  # set for LINK, and for REVIEW when staff could approve
+    notes: tuple[str, ...] = ()  # informational remarks on a LINK (e.g. names differ)
 
     @property
     def approvable(self) -> bool:
@@ -113,16 +114,17 @@ def decide(inp: LinkInput) -> Decision:
         return Decision(Action.REVIEW, tuple(blocking))
 
     discord_id = inp.discord_matches[0]
-    reasons = []
+    conflicts = []  # linking anyway would take an account away from someone: staff must approve
     if inp.pilot_owner and inp.pilot_owner.ips_member_id != p.member_id:
-        reasons.append(f"FSAirlines pilot `{inp.pilot.id}` is already linked to <@{inp.pilot_owner.discord_id}>.")
+        conflicts.append(f"FSAirlines pilot `{inp.pilot.id}` is already linked to <@{inp.pilot_owner.discord_id}>.")
     if inp.discord_owner and inp.discord_owner.ips_member_id != p.member_id:
-        reasons.append(f"<@{discord_id}> is already linked to another website account.")
+        conflicts.append(f"<@{discord_id}> is already linked to another website account.")
+    notes = []  # worth knowing, but not a reason to block the link
     if not names_match(inp.pilot, p.name):
-        reasons.append(f"FSAirlines name '{inp.pilot.full_name}' doesn't match website name '{p.name}'.")
-    if reasons:
-        return Decision(Action.REVIEW, tuple(reasons), discord_id)
-    return Decision(Action.LINK, (), discord_id)
+        notes.append(f"FSAirlines name '{inp.pilot.full_name}' doesn't match website name '{p.name}'.")
+    if conflicts:
+        return Decision(Action.REVIEW, tuple(conflicts + notes), discord_id)
+    return Decision(Action.LINK, (), discord_id, tuple(notes))
 
 
 # --- rank roles ------------------------------------------------------------------

@@ -64,10 +64,16 @@ def test_discord_not_resolved(matches, text):
     assert d.action is lk.Action.REVIEW and not d.approvable and text in d.reasons[0]
 
 
-def test_name_mismatch_is_approvable():
+def test_name_mismatch_links_with_note():
     d = decide(profile=profile(name="Captain Viking"))
-    assert d.action is lk.Action.REVIEW and d.approvable and d.discord_id == 1
-    assert "doesn't match" in d.reasons[0]
+    assert d.action is lk.Action.LINK and d.discord_id == 1 and not d.reasons
+    assert "doesn't match" in d.notes[0]
+
+
+def test_conflict_plus_name_mismatch_reviewed_with_both():
+    d = decide(profile=profile(name="Captain Viking"), pilot_owner=link(discord_id=5, ips=50))
+    assert d.action is lk.Action.REVIEW and d.approvable
+    assert "<@5>" in d.reasons[0] and "doesn't match" in d.reasons[1]
 
 
 def test_pilot_owned_by_someone_else():

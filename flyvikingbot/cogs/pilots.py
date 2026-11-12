@@ -300,8 +300,9 @@ class Pilots(commands.Cog):
             await self.apply_link(profile, decision.discord_id, source="auto", pilot=inp.pilot)
             await self.bot.post_system_message(
                 f"✅ Linked <@{decision.discord_id}> to FSAirlines pilot `{inp.pilot.id}` ({inp.pilot.full_name}) "
-                f"· {_profile_link(profile.profile_url)}",
-                action_required=False,
+                f"· {_profile_link(profile.profile_url)}"
+                + "".join(f"\nℹ️ {note}" for note in decision.notes),
+                action_required=False,  # notes are for awareness only
             )
         elif decision.action is lk.Action.UNLINK:
             await self.apply_unlink(current)

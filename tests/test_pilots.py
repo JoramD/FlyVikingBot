@@ -77,6 +77,12 @@ def profile(**kw):
     return parse_member_profile(member_payload(**kw), FSA_FIELD, DISCORD_FIELD)
 
 
+async def pilot_taken(env, pilot_id="100"):
+    """FSA pilot already linked to another member: linking anyway needs staff approval."""
+    await env.storage.save_link(discord_id=2, ips_member_id=50, ips_profile_url=None, discord_name="someone",
+                                service="fsa", external_id=pilot_id, source="auto")
+
+
 async def test_auto_link_and_noop(env):
     d = await env.cog.process_profile(profile(name="Joram Davids"))
     assert d.action is lk.Action.LINK
@@ -91,11 +97,21 @@ async def test_auto_link_and_noop(env):
     env.fsa.pilot.assert_not_awaited()  # no API call for unrelated profile edits
 
 
-async def test_name_mismatch_goes_to_staff_with_buttons_then_approve(env):
+async def test_name_mismatch_links_with_note_and_no_ping(env):
     d = await env.cog.process_profile(profile(name="Captain Viking"))
+    assert d.action is lk.Action.LINK
+    assert (await env.storage.link_by_discord(1, "fsa")).external_id == "100"
+    msg, kwargs = env.bot.post_system_message.await_args.args[0], env.bot.post_system_message.await_args.kwargs
+    assert msg.startswith("✅ Linked <@1>") and "ℹ️ FSAirlines name 'Joram Davids' doesn't match" in msg
+    assert kwargs["action_required"] is False and "view" not in kwargs
+
+
+async def test_conflict_goes_to_staff_with_buttons_then_approve(env):
+    await pilot_taken(env)
+    d = await env.cog.process_profile(profile(name="Joram Davids"))
     assert d.action is lk.Action.REVIEW
     msg, kwargs = env.bot.post_system_message.await_args.args[0], env.bot.post_system_message.await_args.kwargs
-    assert "https://flyviking.net/profile/1-joramd/" in msg and "doesn't match" in msg
+    assert "https://flyviking.net/profile/1-joramd/" in msg and "already linked to <@2>" in msg
     assert [b.custom_id for b in kwargs["view"].children] == ["fvlink:approve:1", "fvlink:reject:1"]
     assert json.loads(await env.storage.kv_get("review:1"))["discord_id"] == 1
 
@@ -240,16 +256,19 @@ async def test_unknown_callsign_reviewed(env):
 
 
 async def test_review_posted_once_per_entered_values(env):
-    await env.cog.process_profile(profile(name="Captain Viking"))
-    await env.cog.process_profile(profile(name="Captain Viking"))  # unrelated profile save
+    await pilot_taken(env)
+    await pilot_taken(env, "200")
+    await env.cog.process_profile(profile(name="Joram Davids"))
+    await env.cog.process_profile(profile(name="Joram Davids"))  # unrelated profile save
     assert env.bot.post_system_message.await_count == 1
-    await env.cog.process_profile(profile(name="Captain Viking", fsa_id="200"))  # changed values: new review
+    await env.cog.process_profile(profile(name="Joram Davids", fsa_id="200"))  # changed values: new review
     assert env.bot.post_system_message.await_count == 2
 
 
 async def test_approved_callsign_review_stores_numeric_id(env):
     env.fsa.resolve_pilot_id = AsyncMock(return_value="100")
-    await env.cog.process_profile(profile(name="Captain Viking", fsa_id="FVK003"))
+    await pilot_taken(env)
+    await env.cog.process_profile(profile(name="Joram Davids", fsa_id="FVK003"))
     assert json.loads(await env.storage.kv_get("review:1"))["fsa_pilot_id"] == "100"
     assert "`FVK003`" in env.bot.post_system_message.await_args.args[0]  # shows what the member typed
 
@@ -271,9 +290,10 @@ async def test_on_demand_lookup_links_profile_saved_while_offline(env):
 
 
 async def test_on_demand_lookup_explains_pending_review(env):
-    env.bot.website = SimpleNamespace(list_members=AsyncMock(return_value=[member_payload(name="Captain Viking")]))
+    env.bot.website = SimpleNamespace(list_members=AsyncMock(return_value=[member_payload(name="Joram Davids")]))
+    await pilot_taken(env)
     link, note = await env.cog.link_from_website(SimpleNamespace(id=1, name="joramd"))
-    assert link is None and "needs a quick check by staff" in note and "doesn't match" in note
+    assert link is None and "needs a quick check by staff" in note and "already linked" in note
 
 
 async def test_on_demand_lookup_permission_error_reported_once(env):
@@ -321,7 +341,8 @@ async def test_system_message_action_flags(env):
     assert env.bot.post_system_message.await_args.kwargs["action_required"] is False
     await env.cog.process_profile(profile(name="Joram Davids", fsa_id=None, discord=None))  # unlink: informational
     assert env.bot.post_system_message.await_args.kwargs["action_required"] is False
-    await env.cog.process_profile(profile(name="Captain Viking"))  # review: staff must act
+    await pilot_taken(env)
+    await env.cog.process_profile(profile(name="Joram Davids"))  # conflict review: staff must act
     assert env.bot.post_system_message.await_args.kwargs["action_required"] is True
     await env.cog.report_once("x", "problem")  # every reported problem needs action
     assert env.bot.post_system_message.await_args.kwargs["action_required"] is True
