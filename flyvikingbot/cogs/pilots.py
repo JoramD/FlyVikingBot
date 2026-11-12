@@ -175,6 +175,9 @@ class Pilots(commands.Cog):
     async def on_ips_webhook(self, event: str, payload: Any) -> None:
         if event not in ev.MEMBER_EVENTS or not self.linking_enabled:
             return
+        if ev.only_bookkeeping_changes(payload):
+            log.debug("Ignoring member_edited with only bookkeeping changes (e.g. a profile view)")
+            return
         profile = ev.parse_member_profile(
             payload, self.settings.ips_field_fsa_pilot_id, self.settings.ips_field_discord_name
         )

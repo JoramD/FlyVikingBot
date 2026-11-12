@@ -342,3 +342,26 @@ async def test_bad_data_in_both_fields_gives_one_post(env):
     env.bot.post_system_message.assert_awaited_once()
     msg = env.bot.post_system_message.await_args.args[0]
     assert "`FVK999` doesn't exist" in msg and "`nobody`" in msg
+
+
+def test_real_member_edited_capture():
+    body = load_fixture("real_member_edited")
+    p = parse_member_profile(body, 3, 4)  # the real field IDs on flyviking.net
+    assert p.member_id == 3 and p.fsa_pilot_id == "3123213" and p.discord_name == "13213"
+    assert p.profile_url == "https://flyviking.net/profile/3-testpilot/"
+
+
+async def test_profile_views_are_ignored(env):
+    from flyvikingbot.webhooks.ips_events import only_bookkeeping_changes
+
+    view = {"member": member_payload(), "changes": {"pp_last_visitors": "{}"}}
+    assert only_bookkeeping_changes(view)
+    assert not only_bookkeeping_changes({"member": member_payload(), "changes": {"pp_last_visitors": "{}", "x": 1}})
+    assert not only_bookkeeping_changes({"member": member_payload()})  # unknown: process
+    assert not only_bookkeeping_changes({"member": member_payload(), "changes": {}})
+
+    await env.cog.on_ips_webhook("member_edited", view)
+    env.fsa.pilot.assert_not_awaited()
+    assert await env.storage.link_by_ips_member(1, "fsa") is None
+    await env.cog.on_ips_webhook("member_edited", {"member": member_payload(name="Joram Davids"), "changes": {}})
+    assert await env.storage.link_by_ips_member(1, "fsa") is not None

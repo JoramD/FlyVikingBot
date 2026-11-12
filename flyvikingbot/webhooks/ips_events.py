@@ -186,3 +186,16 @@ def parse_member_profile(
         fsa_pilot_id=_custom_field(data, fsa_field_id),
         discord_name=_custom_field(data, discord_field_id),
     )
+
+
+# member_edited also fires for bookkeeping, e.g. someone viewing the profile ("pp_last_visitors").
+# Events whose `changes` contain only these keys can't affect linking and are skipped. Anything else,
+# or a missing/empty `changes`, is processed as usual.
+BOOKKEEPING_CHANGES = frozenset(
+    {"pp_last_visitors", "members_profile_views", "last_visit", "last_activity", "member_last_post"}
+)
+
+
+def only_bookkeeping_changes(payload: Any) -> bool:
+    changes = payload.get("changes") if isinstance(payload, dict) else None
+    return isinstance(changes, dict) and bool(changes) and set(changes) <= BOOKKEEPING_CHANGES
