@@ -31,6 +31,9 @@ class WebsiteClient:
     def build_url(self, endpoint: str, **params: Any) -> URL:
         # IPS routes on the raw query string (index.php?/core/search&q=...), so the
         # endpoint must stay unencoded while the parameters are encoded normally.
+        # The API key travels as ?key= by choice: it does appear in the website's access log,
+        # which only the site owner can read. (HTTP Basic auth would avoid that, but depends on
+        # the web server passing the Authorization header through to PHP.)
         query = urlencode({"key": self._api_key, **params})
         return URL(f"{self._base_url}?{endpoint}&{query}", encoded=True)
 
