@@ -1,3 +1,6 @@
+"""Shared HTTP helpers. Failures become ServiceError; URLs in errors never include the query
+string, because that's where the API keys travel."""
+
 import logging
 from typing import Any
 

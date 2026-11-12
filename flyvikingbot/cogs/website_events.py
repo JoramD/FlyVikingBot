@@ -46,10 +46,19 @@ class WebsiteEvents(commands.Cog):
         channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
         return channel  # type: ignore[return-value]
 
+    def _is_website_url(self, url: str) -> bool:
+        """Only download from our own website. A webhook can name any URL, and fetching arbitrary URLs
+        would let anyone holding the webhook secret make the bot read internal addresses (SSRF)."""
+        target, site = urlparse(url), urlparse(self.settings.website_root)
+        return target.scheme in ("http", "https") and target.hostname == site.hostname
+
     async def _fetch_image(self, url: str) -> bytes | None:
-        """Download an image for re-upload. Returns None if unavailable or too large."""
+        """Download an image for re-upload. Returns None if not on our website, unavailable or too large."""
         session = self.bot.http_session
         if session is None:
+            return None
+        if not self._is_website_url(url):
+            log.warning("Not downloading image from outside the website: %s", url)
             return None
         try:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
@@ -70,6 +79,7 @@ class WebsiteEvents(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ips_webhook(self, event: str, payload: Any) -> None:
+        await self.bot.wait_until_ready()  # webhooks can arrive while the bot is still connecting
         try:
             await self.handle(event, payload)
         except discord.HTTPException:

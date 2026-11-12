@@ -1,3 +1,5 @@
+"""/paint_lookup: find an aircraft paint in the website's downloads."""
+
 from __future__ import annotations
 
 import logging

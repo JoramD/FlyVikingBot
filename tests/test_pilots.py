@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -67,7 +68,7 @@ async def env(tmp_path):
     guild = SimpleNamespace(members=members, get_member=lambda mid: next((m for m in members if m.id == mid), None))
     fsa = SimpleNamespace(pilot=AsyncMock(return_value=fsa_pilot()))
     bot = SimpleNamespace(settings=settings, storage=storage, fsa=fsa, primary_guild=lambda: guild,
-                          post_system_message=AsyncMock())
+                          post_system_message=AsyncMock(), wait_until_ready=AsyncMock())
     cog = pc.Pilots(bot)
     cog.set_rank_role = AsyncMock(return_value=None)
     return SimpleNamespace(cog=cog, bot=bot, storage=storage, fsa=fsa, joram=joram)
@@ -102,7 +103,8 @@ async def test_name_mismatch_links_with_note_and_no_ping(env):
     assert d.action is lk.Action.LINK
     assert (await env.storage.link_by_discord(1, "fsa")).external_id == "100"
     msg, kwargs = env.bot.post_system_message.await_args.args[0], env.bot.post_system_message.await_args.kwargs
-    assert msg.startswith("✅ Linked <@1>") and "ℹ️ FSAirlines name 'Joram Davids' doesn't match" in msg
+    assert msg.startswith("✅ Linked <@1>")
+    assert "ℹ️ FSAirlines name `Joram Davids` doesn't match website name `Captain Viking`" in msg
     assert kwargs["action_required"] is False and "view" not in kwargs
 
 
@@ -115,7 +117,8 @@ async def test_conflict_goes_to_staff_with_buttons_then_approve(env):
     assert [b.custom_id for b in kwargs["view"].children] == ["fvlink:approve:1", "fvlink:reject:1"]
     assert json.loads(await env.storage.kv_get("review:1"))["discord_id"] == 1
 
-    staff = SimpleNamespace(guild_permissions=SimpleNamespace(manage_roles=True), mention="<@99>")
+    staff = SimpleNamespace(guild_permissions=SimpleNamespace(manage_roles=True, administrator=False), roles=[],
+                            mention="<@99>")
     interaction = MagicMock(user=staff, message=SimpleNamespace(content="review"))
     interaction.response.defer = AsyncMock()
     interaction.edit_original_response = AsyncMock()
@@ -126,7 +129,7 @@ async def test_conflict_goes_to_staff_with_buttons_then_approve(env):
 
 
 async def test_review_buttons_require_staff(env):
-    user = SimpleNamespace(guild_permissions=SimpleNamespace(manage_roles=False))
+    user = SimpleNamespace(guild_permissions=SimpleNamespace(manage_roles=False, administrator=False), roles=[])
     interaction = MagicMock(user=user)
     interaction.response.send_message = AsyncMock()
     await env.cog.handle_review(interaction, "approve", 1)
@@ -307,6 +310,7 @@ async def test_on_demand_lookup_permission_error_reported_once(env):
 
 
 async def test_sync_rank_member_links_on_demand(env):
+    env.fsa.ranks = AsyncMock(return_value=[])
     env.bot.website = SimpleNamespace(list_members=AsyncMock(return_value=[member_payload(name="Joram Davids")]))
     interaction = MagicMock()
     interaction.response.defer = AsyncMock()
@@ -386,3 +390,24 @@ async def test_profile_views_are_ignored(env):
     assert await env.storage.link_by_ips_member(1, "fsa") is None
     await env.cog.on_ips_webhook("member_edited", {"member": member_payload(name="Joram Davids"), "changes": {}})
     assert await env.storage.link_by_ips_member(1, "fsa") is not None
+
+
+async def test_board_role_holder_can_approve_without_manage_roles(env):
+    """Approve/Reject use the same staff definition as the Completed button."""
+    board = 631901856997834778
+    env.cog.settings = dataclasses.replace(env.cog.settings, system_messages_role_id=board)
+    user = SimpleNamespace(guild_permissions=SimpleNamespace(manage_roles=False, administrator=False),
+                           roles=[SimpleNamespace(id=board)], mention="<@5>")
+    interaction = MagicMock(user=user, message=SimpleNamespace(content="review"))
+    interaction.response.edit_message = AsyncMock()
+    await env.cog.handle_review(interaction, "reject", 1)  # no pending review: "already handled"
+    assert "already handled" in interaction.response.edit_message.await_args.kwargs["content"]
+
+
+def test_fsa_sample_redacts_names():
+    from flyvikingbot.tools.fsa_sample import anonymise
+
+    out = anonymise([{"id": 1, "name": "Jan", "surname": "Jansen", "user": "jj", "pic": "Jan Jansen",
+                      "va_user": "FVK009", "email": "a@b.c"}])[0]
+    assert out == {"id": 1, "name": "<redacted>", "surname": "<redacted>", "user": "<redacted>",
+                   "pic": "<redacted>", "va_user": "FVK009", "email": "<redacted>"}

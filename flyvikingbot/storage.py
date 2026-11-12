@@ -55,6 +55,9 @@ FROM accounts a JOIN members m ON m.discord_id = a.discord_id
 
 
 class Storage:
+    """Async wrapper around data/flyviking.db. Tables: members, accounts (one row per linked service)
+    and kv (small bot state: last posted flight, reported problems, pending reviews, callsign cache)."""
+
     def __init__(self, path: Path) -> None:
         self.path = path
 

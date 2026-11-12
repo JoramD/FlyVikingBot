@@ -1,3 +1,5 @@
+"""Staff utilities: /clear (administrators only)."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -11,6 +13,7 @@ if TYPE_CHECKING:
 
 
 class Admin(commands.Cog):
+    """Administrator-only commands (Discord hides them from everyone else)."""
     def __init__(self, bot: FlyVikingBot) -> None:
         self.bot = bot
 

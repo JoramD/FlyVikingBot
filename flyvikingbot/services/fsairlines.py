@@ -2,8 +2,8 @@
 
 Docs: https://wiki.fsairlines.net/index.php/XML-Interface-v2
 
-Responses look like {"status": "SUCCESS", "data": [...]}. Field formats aren't
-fully documented (numbers may come as strings), so parsing is defensive.
+Responses look like {"status": "SUCCESS", "data": [...]}. Parsing is verified against real
+responses (tests/fixtures/fsa/) and tolerates numbers sent as strings or missing fields.
 """
 
 from __future__ import annotations
@@ -233,6 +233,8 @@ def _records(data: Any) -> list[dict[str, Any]]:
 
 
 class FsaClient:
+    """Async client; every failure raises ServiceError (FsaNotFound for unknown pilots)."""
+
     def __init__(self, session: aiohttp.ClientSession, va_id: int, api_key: str, api_url: str = API_URL) -> None:
         self._session = session
         self._va_id = va_id
@@ -241,6 +243,7 @@ class FsaClient:
         self._ranks: tuple[float, list[Rank]] | None = None
 
     async def call(self, function: str, **params: Any) -> list[dict[str, Any]]:
+        """Call an XML-Interface function and return its data records."""
         query = {"function": function, "va_id": self._va_id, "format": "json", "apikey": self._api_key}
         query.update({k: v for k, v in params.items() if v is not None})
         data = await get_json(self._session, self._api_url, params=query)

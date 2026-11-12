@@ -1,3 +1,5 @@
+"""/airline_statistics: airline-wide FSAirlines statistics."""
+
 from __future__ import annotations
 
 import logging

@@ -1,3 +1,6 @@
+"""The bot itself: shared HTTP session, API clients, storage, cogs, slash-command sync,
+the webhook server and the #system-messages helper."""
+
 from __future__ import annotations
 
 import logging
@@ -28,6 +31,8 @@ EXTENSIONS = (
 
 
 class FlyVikingBot(commands.Bot):
+    """Slash commands only (no message content). API clients are created in setup_hook."""
+
     def __init__(self, settings: Settings) -> None:
         intents = discord.Intents.default()
         intents.members = True  # privileged: find members by username + manage rank roles
@@ -53,6 +58,7 @@ class FlyVikingBot(commands.Bot):
         self.dispatch("ips_webhook", event, payload)
 
     async def setup_hook(self) -> None:
+        """Runs once before connecting: clients, storage, cogs, command sync, webhook server."""
         self.http_session = aiohttp.ClientSession(headers={"User-Agent": "FlyVikingBot"})
         self.website = WebsiteClient(self.http_session, self.settings.website_base_url, self.settings.website_api_key)
         self.fsa = FsaClient(self.http_session, self.settings.fsa_va_id, self.settings.fsa_api_key)

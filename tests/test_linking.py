@@ -114,3 +114,12 @@ def test_all_blocking_problems_reported_together():
     d = decide(pilot=None, discord_matches=[])
     assert d.action is lk.Action.REVIEW and not d.approvable and len(d.reasons) == 2
     assert "doesn't exist" in d.reasons[0] and "No server member" in d.reasons[1]
+
+
+@pytest.mark.parametrize(
+    ("raw", "shown"),
+    [("Joram", "`Joram`"), ("[click](https://evil)", "`[click](https://evil)`"), ("a`b", "`a'b`"),
+     ("", "`(empty)`"), (None, "`(empty)`"), ("x" * 200, "`" + "x" * 100 + "`"), ("@everyone\nhi", "`@everyone hi`")],
+)
+def test_code_neutralises_member_text(raw, shown):
+    assert lk.code(raw) == shown

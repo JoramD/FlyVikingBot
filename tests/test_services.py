@@ -80,3 +80,10 @@ async def test_network_error_does_not_leak_key():
         with pytest.raises(ServiceError) as info:
             await website.search_files("x")
     assert "secret-key" not in str(info.value)
+
+
+@pytest.mark.parametrize("body", [{"totalResults": 1, "results": []}, {"totalResults": "x"}, {"totalResults": 1}])
+async def test_search_malformed_response_is_service_error(api, body):
+    api[0].responses["/core/search"] = (200, body)
+    with pytest.raises(ServiceError, match="unexpected data"):
+        await client(api).search_files("x")

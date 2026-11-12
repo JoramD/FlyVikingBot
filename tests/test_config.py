@@ -17,3 +17,10 @@ def test_missing_required(tmp_path):
     env = {k: v for k, v in BASE_ENV.items() if k != "WEBHOOK_SECRET"}
     with pytest.raises(ConfigError, match="WEBHOOK_SECRET"):
         load_settings(env=env)
+
+
+def test_bad_number_gives_config_error(tmp_path):
+    with pytest.raises(ConfigError, match="WEBHOOK_PORT must be a whole number"):
+        load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path), "WEBHOOK_PORT": "80a"})
+    with pytest.raises(ConfigError, match="GUILD_ID"):
+        load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path), "GUILD_ID": "abc"})

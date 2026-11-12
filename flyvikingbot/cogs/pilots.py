@@ -20,6 +20,7 @@ from ..services.fsairlines import FsaNotFound, Pilot
 from ..services.http import ServiceError
 from ..services.website import member_group_ids
 from ..storage import Link
+from ..system_messages import is_staff
 from ..webhooks import ips_events as ev
 from .flight_logs import flight_title, format_hours
 
@@ -175,6 +176,7 @@ class Pilots(commands.Cog):
     async def on_ips_webhook(self, event: str, payload: Any) -> None:
         if event not in ev.MEMBER_EVENTS or not self.linking_enabled:
             return
+        await self.bot.wait_until_ready()  # the server (guild) isn't known until the bot has connected
         if ev.only_bookkeeping_changes(payload):
             log.debug("Ignoring member_edited with only bookkeeping changes (e.g. a profile view)")
             return
@@ -189,9 +191,11 @@ class Pilots(commands.Cog):
             log.exception("Linking failed for website member %s", profile.member_id)
 
     async def ensure_link(self, user: discord.abc.User) -> tuple[Link | None, str | None]:
-        """The rule for any feature that needs a member's link: use stored data, and if it's missing, fetch it
-        from the website (when possible, rate-limited by the per-user cooldown). Returns (link, note for the
-        member). Don't read storage directly in features; call this so missed webhooks are self-healing."""
+        """The rule for any feature that *requires* a member's link: use stored data, and if it's missing,
+        fetch it from the website (when possible, rate-limited by the per-user cooldown). Returns (link, note
+        for the member). Features that need the link must use this rather than reading storage directly, so
+        missed webhooks heal themselves. Purely optional lookups (e.g. an @mention in a flight log) may read
+        storage directly."""
         link = await self.bot.storage.link_by_discord(user.id, lk.SERVICE_FSA)
         if link is not None:
             return link, None
@@ -299,7 +303,8 @@ class Pilots(commands.Cog):
         if decision.action is lk.Action.LINK:
             await self.apply_link(profile, decision.discord_id, source="auto", pilot=inp.pilot)
             await self.bot.post_system_message(
-                f"✅ Linked <@{decision.discord_id}> to FSAirlines pilot `{inp.pilot.id}` ({inp.pilot.full_name}) "
+                f"✅ Linked <@{decision.discord_id}> to FSAirlines pilot {lk.code(inp.pilot.id)} "
+                f"({lk.code(inp.pilot.full_name)}) "
                 f"· {_profile_link(profile.profile_url)}"
                 + "".join(f"\nℹ️ {note}" for note in decision.notes),
                 action_required=False,  # notes are for awareness only
@@ -331,9 +336,10 @@ class Pilots(commands.Cog):
         """Post a staff review. `profile` carries the resolved pilot ID; `entered` is what the member typed."""
         reasons = "\n".join(f"• {r}" for r in decision.reasons)
         header = (
-            f"⚠️ **Couldn't link website member '{profile.name}' automatically** "
+            f"⚠️ **Couldn't link website member {lk.code(profile.name)} automatically** "
             f"· {_profile_link(profile.profile_url)}\n"
-            f"Entered: FSAirlines pilot `{entered or profile.fsa_pilot_id}`, Discord `{profile.discord_name}`\n"
+            f"Entered: FSAirlines pilot {lk.code(entered or profile.fsa_pilot_id)}, "
+            f"Discord {lk.code(profile.discord_name)}\n"
             f"{reasons}"
         )
         if not decision.approvable:
@@ -357,8 +363,7 @@ class Pilots(commands.Cog):
         )
 
     async def handle_review(self, interaction: discord.Interaction, action: str, ips_member_id: int) -> None:
-        perms = getattr(interaction.user, "guild_permissions", None)
-        if not perms or not perms.manage_roles:
+        if not is_staff(interaction.user, self.settings.system_messages_role_id):
             await interaction.response.send_message("Only staff can do this.", ephemeral=True)
             return
         key = REVIEW_KEY.format(ips_member_id)
@@ -608,14 +613,18 @@ class Pilots(commands.Cog):
             return None
         return f"{member.mention}: {names_of(to_remove)} → {names_of(to_add)}"
 
+    async def rank_name(self, rank_id: int | None) -> str | None:
+        """Full FSA rank name (getPilotData only gives the short form, e.g. "CEO"). None if unknown."""
+        try:
+            return next((r.name for r in await self.bot.fsa.ranks() if r.id == rank_id), None)
+        except ServiceError:
+            return None
+
     async def notify_board_rank(
         self, member: discord.Member, rank_id: int, removed: str | None, profile_url: str | None
     ) -> None:
         """Tell staff (once per member and rank) that a pilot is on a Board of Directors rank."""
-        try:
-            rank_name = next((r.name for r in await self.bot.fsa.ranks() if r.id == rank_id), f"rank {rank_id}")
-        except ServiceError:
-            rank_name = f"rank {rank_id}"
+        rank_name = await self.rank_name(rank_id) or f"rank {rank_id}"
         removed_text = f" Removed pilot rank role(s): {removed}." if removed else ""
         await self.report_once(
             f"board:{member.id}:{rank_id}",
@@ -693,8 +702,9 @@ class Pilots(commands.Cog):
             change = await self.sync_ranks(
                 member, link.ips_member_id, pilot.rank_id, profile_url=link.ips_profile_url
             )
+            rank_name = await self.rank_name(pilot.rank_id) or pilot.rank or "unknown rank"
             await interaction.followup.send(
-                change or f"{member.mention} is already up to date ({pilot.rank or 'unknown rank'}).", ephemeral=True
+                change or f"{member.mention} is already up to date ({rank_name}).", ephemeral=True
             )
         except ServiceError as exc:
             log.error("sync_rank failed: %s", exc)
@@ -758,10 +768,7 @@ class Pilots(commands.Cog):
             flights = await self.bot.fsa.flight_logs(count=1, pilot_id=fsa_id)
         except ServiceError:
             flights = []
-        try:
-            rank_name = next((r.name for r in await self.bot.fsa.ranks() if r.id == data.rank_id), None)
-        except ServiceError:
-            rank_name = None
+        rank_name = await self.rank_name(data.rank_id)
         await interaction.followup.send(embed=pilot_embed(data, mention, flights[-1] if flights else None, rank_name))
 
 

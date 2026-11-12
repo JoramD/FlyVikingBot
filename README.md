@@ -137,6 +137,7 @@ flyvikingbot/
   config.py           settings from env / .env
   storage.py          SQLite (data/flyviking.db): account links and small bot state
   linking.py          pure link-decision and rank-role logic
+  system_messages.py  #system-messages helpers: staff check and the persistent Completed button
   cogs/               one module per feature (airline, website, admin, status, website_events, flight_logs, pilots)
   services/           async API clients (FSAirlines, Invision Community)
   webhooks/           webhook HTTP receiver and IPS payload parsing

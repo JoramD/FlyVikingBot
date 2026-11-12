@@ -30,13 +30,16 @@ _IMG_SRC = re.compile(r"<img[^>]+src=[\"']([^\"']+)[\"']", re.IGNORECASE)
 
 @dataclass(frozen=True)
 class GalleryImage:
-    title: str | None
-    url: str | None
-    image_url: str
+    """A new gallery image; posted to #screenshots."""
+
+    url: str | None  # the image's gallery page
+    image_url: str  # the image file itself (large version if available)
 
 
 @dataclass(frozen=True)
 class BlogEntry:
+    """A new blog entry; entries from the announcements blog become @everyone announcements."""
+
     title: str
     url: str
     blog_id: int | None
@@ -45,6 +48,8 @@ class BlogEntry:
 
 @dataclass(frozen=True)
 class DownloadsFile:
+    """A new file (or a new version of one) in the website's downloads."""
+
     title: str | None
     url: str
     version: str | None
@@ -95,7 +100,7 @@ def parse_gallery_image(payload: Any) -> GalleryImage | None:
     if not image_url:
         _missing(GALLERY_IMAGE_CREATE, "images", data)
         return None
-    return GalleryImage(title=_str(data.get("title")), url=_str(data.get("url")), image_url=image_url)
+    return GalleryImage(url=_str(data.get("url")), image_url=image_url)
 
 
 def parse_blog_entry(payload: Any) -> BlogEntry | None:
@@ -129,6 +134,8 @@ _TAG = re.compile(r"<[^>]+>")
 
 @dataclass(frozen=True)
 class MemberProfile:
+    """The parts of a website member that account linking needs."""
+
     member_id: int
     name: str | None
     profile_url: str | None
@@ -181,5 +188,6 @@ BOOKKEEPING_CHANGES = frozenset(
 
 
 def only_bookkeeping_changes(payload: Any) -> bool:
+    """True if a member_edited event can't affect linking (only bookkeeping keys changed)."""
     changes = payload.get("changes") if isinstance(payload, dict) else None
     return isinstance(changes, dict) and bool(changes) and set(changes) <= BOOKKEEPING_CHANGES

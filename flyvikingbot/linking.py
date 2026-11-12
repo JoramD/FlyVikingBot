@@ -15,6 +15,13 @@ from .webhooks.ips_events import MemberProfile
 SERVICE_FSA = "fsa"
 
 
+def code(text: str | None, limit: int = 100) -> str:
+    """Show text a member typed (names, profile fields) as inline code. Inside a code span Discord
+    renders no markdown, links or mentions, so a crafted name can't masquerade as something else."""
+    cleaned = " ".join((text or "").replace("`", "'").split())[:limit]
+    return f"`{cleaned}`" if cleaned else "`(empty)`"
+
+
 def normalize(text: str | None) -> str:
     """Lowercase, strip accents and collapse whitespace: 'Jöram  Davids' -> 'joram davids'."""
     if not text:
@@ -98,23 +105,23 @@ def decide(inp: LinkInput) -> Decision:
     # Report every problem with the entered values in one go, not one per profile save
     blocking = []
     if inp.pilot is None:
-        blocking.append(f"FSAirlines pilot `{p.fsa_pilot_id}` doesn't exist.")
+        blocking.append(f"FSAirlines pilot {code(p.fsa_pilot_id)} doesn't exist.")
     if not inp.discord_matches:
-        blocking.append(f"No server member found with Discord username `{p.discord_name}`.")
+        blocking.append(f"No server member found with Discord username {code(p.discord_name)}.")
     elif len(inp.discord_matches) > 1:
-        blocking.append(f"Discord name `{p.discord_name}` matches several server members.")
+        blocking.append(f"Discord name {code(p.discord_name)} matches several server members.")
     if blocking:
         return Decision(Action.REVIEW, tuple(blocking))
 
     discord_id = inp.discord_matches[0]
     conflicts = []  # linking anyway would take an account away from someone: staff must approve
     if inp.pilot_owner and inp.pilot_owner.ips_member_id != p.member_id:
-        conflicts.append(f"FSAirlines pilot `{inp.pilot.id}` is already linked to <@{inp.pilot_owner.discord_id}>.")
+        conflicts.append(f"FSAirlines pilot {code(inp.pilot.id)} is already linked to <@{inp.pilot_owner.discord_id}>.")
     if inp.discord_owner and inp.discord_owner.ips_member_id != p.member_id:
         conflicts.append(f"<@{discord_id}> is already linked to another website account.")
     notes = []  # worth knowing, but not a reason to block the link
     if not names_match(inp.pilot, p.name):
-        notes.append(f"FSAirlines name '{inp.pilot.full_name}' doesn't match website name '{p.name}'.")
+        notes.append(f"FSAirlines name {code(inp.pilot.full_name)} doesn't match website name {code(p.name)}.")
     if conflicts:
         return Decision(Action.REVIEW, tuple(conflicts + notes), discord_id)
     return Decision(Action.LINK, (), discord_id, tuple(notes))

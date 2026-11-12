@@ -14,11 +14,15 @@ from .http import ServiceError, request_json
 
 @dataclass
 class FileSearchResult:
+    """Outcome of a downloads search."""
+
     total: int
     file: dict[str, Any] | None = None  # set only when exactly one match
 
 
 class WebsiteClient:
+    """Thin async client for the endpoints the bot uses. Every failure raises ServiceError."""
+
     def __init__(self, session: aiohttp.ClientSession, base_url: str, api_key: str) -> None:
         self._session = session
         self._base_url = base_url
@@ -42,41 +46,57 @@ class WebsiteClient:
         return data
 
     async def search_files(self, query: str) -> FileSearchResult:
+        """Search the downloads. The file itself is fetched only when there's exactly one match."""
         data = await self._get(
             "/core/search", q=query, type="downloads_file", search_and_or="and", doNotTrack="0"
         )
-        total = int(data.get("totalResults", 0))
-        if total != 1:
-            return FileSearchResult(total=total)
-        item_id = data["results"][0]["itemId"]
+        try:
+            total = int(data.get("totalResults", 0))
+            if total != 1:
+                return FileSearchResult(total=total)
+            item_id = int(data["results"][0]["itemId"])
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            raise ServiceError(f"Website search returned unexpected data ({type(exc).__name__})") from exc
         return FileSearchResult(total=1, file=await self.get_file(item_id))
 
     async def get_file(self, file_id: int) -> dict[str, Any]:
+        """A downloads file object (title, url, author, primaryScreenshot, ...)."""
         return await self._get(f"/downloads/files/{file_id}")
 
     # --- members & groups -------------------------------------------------------------------
 
     async def list_groups(self) -> list[tuple[int, str]]:
         """All member groups as (id, name)."""
-        groups, page = [], 1
-        while True:
-            data = await self._get("/core/groups", perPage=100, page=page)
-            groups += [(int(g["id"]), str(g.get("name", ""))) for g in data.get("results", []) if "id" in g]
-            if page >= int(data.get("totalPages", 1) or 1):
-                return groups
-            page += 1
+        groups: list[tuple[int, str]] = []
+        async for page in self._pages("/core/groups"):
+            try:
+                groups += [(int(g["id"]), str(g.get("name", ""))) for g in page if "id" in g]
+            except (TypeError, ValueError) as exc:
+                raise ServiceError("Website returned an unexpected group list") from exc
+        return groups
 
     async def list_members(self) -> list[dict[str, Any]]:
         """All members (paged). Used for on-demand lookups; the API can't filter by profile field."""
-        members, page = [], 1
-        while True:
-            data = await self._get("/core/members", perPage=100, page=page)
-            members += [m for m in data.get("results", []) if isinstance(m, dict)]
-            if page >= int(data.get("totalPages", 1) or 1):
-                return members
-            page += 1
+        members: list[dict[str, Any]] = []
+        async for page in self._pages("/core/members"):
+            members += page
+        return members
+
+    async def _pages(self, endpoint: str, per_page: int = 100, max_pages: int = 100):
+        """Yield the `results` of each page of a paged IPS endpoint (capped as a safety net)."""
+        for page in range(1, max_pages + 1):
+            data = await self._get(endpoint, perPage=per_page, page=page)
+            results = data.get("results")
+            yield [r for r in results if isinstance(r, dict)] if isinstance(results, list) else []
+            try:
+                total_pages = int(data.get("totalPages", 1) or 1)
+            except (TypeError, ValueError):
+                total_pages = 1
+            if page >= total_pages:
+                return
 
     async def get_member(self, member_id: int) -> dict[str, Any]:
+        """A member object (groups, profile fields, profileUrl, ...)."""
         return await self._get(f"/core/members/{member_id}")
 
     async def update_member_groups(

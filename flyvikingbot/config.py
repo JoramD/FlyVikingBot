@@ -14,11 +14,13 @@ DEFAULT_RANK_ROLES = (
 
 
 class ConfigError(RuntimeError):
-    pass
+    """A setting is missing or invalid; the bot exits with a readable message."""
 
 
 @dataclass(frozen=True)
 class Settings:
+    """All settings, read once at startup. Every setting is documented in .env.example."""
+
     discord_token: str
     fsa_api_key: str
     fsa_va_id: int
@@ -66,6 +68,7 @@ def load_settings(
     env: dict[str, str] | None = None,
     load_env_file: bool = True,
 ) -> Settings:
+    """Read settings from `env` (tests) or the process environment plus `.env`. Raises ConfigError."""
     if env is None:
         if load_env_file:
             load_dotenv()
@@ -81,33 +84,42 @@ def load_settings(
             raise ConfigError(f"Missing required setting: {name}")
         return value
 
+    def to_int(name: str, value: str) -> int:
+        try:
+            return int(value)
+        except ValueError:
+            raise ConfigError(f"{name} must be a whole number, got {value!r}") from None
+
     def optional_int(name: str) -> int | None:
         value = get(name)
-        return int(value) if value else None
+        return to_int(name, value) if value else None
+
+    def int_with_default(name: str, default: str) -> int:
+        return to_int(name, get(name, default))
 
     return Settings(
         discord_token=require("DISCORD_TOKEN"),
         fsa_api_key=require("FSA_API_KEY"),
-        fsa_va_id=int(get("FSA_VA_ID", "42982")),
+        fsa_va_id=int_with_default("FSA_VA_ID", "42982"),
         website_api_key=require("WEBSITE_API_KEY"),
         website_base_url=get("WEBSITE_BASE_URL", "https://flyviking.net/api/index.php"),
         uptime_kuma_url=get("UPTIME_KUMA_URL"),
         guild_id=optional_int("GUILD_ID"),
-        channel_announcements=int(get("CHANNEL_ANNOUNCEMENTS", "631949277559783457")),
-        channel_screenshots=int(get("CHANNEL_SCREENSHOTS", "631950027476172810")),
+        channel_announcements=int_with_default("CHANNEL_ANNOUNCEMENTS", "631949277559783457"),
+        channel_screenshots=int_with_default("CHANNEL_SCREENSHOTS", "631950027476172810"),
         webhook_secret=require("WEBHOOK_SECRET"),
         webhook_bind=get("WEBHOOK_BIND", "0.0.0.0"),
-        webhook_port=int(get("WEBHOOK_PORT", "8080")),
+        webhook_port=int_with_default("WEBHOOK_PORT", "8080"),
         webhook_capture=_bool(get("WEBHOOK_CAPTURE", "false")),
-        webhook_capture_keep=int(get("WEBHOOK_CAPTURE_KEEP", "50")),
+        webhook_capture_keep=int_with_default("WEBHOOK_CAPTURE_KEEP", "50"),
         announcement_blog_id=optional_int("ANNOUNCEMENT_BLOG_ID"),
         channel_flight_logs=optional_int("CHANNEL_FLIGHT_LOGS"),
         channel_system_messages=optional_int("CHANNEL_SYSTEM_MESSAGES"),
         system_messages_role_id=optional_int("SYSTEM_MESSAGES_ROLE_ID"),
         ips_field_fsa_pilot_id=optional_int("IPS_FIELD_FSA_PILOT_ID"),
         ips_field_discord_name=optional_int("IPS_FIELD_DISCORD_NAME"),
-        fsa_poll_seconds=max(60, int(get("FSA_POLL_SECONDS", "120"))),
-        fsa_rank_sync_minutes=max(5, int(get("FSA_RANK_SYNC_MINUTES", "60"))),
+        fsa_poll_seconds=max(60, int_with_default("FSA_POLL_SECONDS", "120")),
+        fsa_rank_sync_minutes=max(5, int_with_default("FSA_RANK_SYNC_MINUTES", "60")),
         website_rank_sync=_bool(get("WEBSITE_RANK_SYNC", "true")),
         website_member_group=get("WEBSITE_MEMBER_GROUP", "Members"),
         website_protected_groups=tuple(

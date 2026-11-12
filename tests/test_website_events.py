@@ -18,7 +18,8 @@ def make_cog(tmp_path, **env):
     settings = load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path), **env})
     channels = {100: AsyncMock(), 200: AsyncMock()}
     bot = SimpleNamespace(
-        settings=settings, get_channel=lambda cid: channels.get(cid), fetch_channel=AsyncMock(), http_session=None
+        settings=settings, get_channel=lambda cid: channels.get(cid), fetch_channel=AsyncMock(), http_session=None,
+        wait_until_ready=AsyncMock()
     )
     return WebsiteEvents(bot), channels
 
@@ -52,7 +53,7 @@ async def image_server():
 
 async def test_fetch_image_against_server(tmp_path, image_server, monkeypatch):
     session, base = image_server
-    cog, _ = make_cog(tmp_path)
+    cog, _ = make_cog(tmp_path, WEBSITE_BASE_URL=f"{base}/api/index.php")  # the test server plays the website
     cog.bot.http_session = session
     monkeypatch.setattr(website_events, "MAX_UPLOAD_BYTES", 32)
     assert await cog._fetch_image(f"{base}/ok.png") == b"img"
@@ -104,3 +105,14 @@ async def test_unknown_and_malformed_events_do_nothing(tmp_path):
     await cog.on_ips_webhook(ev.BLOG_ENTRY_CREATE, "garbage")
     ch[100].send.assert_not_awaited()
     ch[200].send.assert_not_awaited()
+
+
+async def test_images_only_downloaded_from_the_website(tmp_path):
+    """A webhook can name any URL; fetching it would let a leaked secret probe internal addresses (SSRF)."""
+    cog, _ = make_cog(tmp_path)
+    cog.bot.http_session = AsyncMock()
+    for url in ("http://flyviking-discord-bot:8080/health", "http://169.254.169.254/latest", "file:///etc/passwd",
+                "https://evil.example/x.png"):
+        assert await cog._fetch_image(url) is None
+    cog.bot.http_session.get.assert_not_called()
+    assert cog._is_website_url("https://flyviking.net/uploads/x.png")
