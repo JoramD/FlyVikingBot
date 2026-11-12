@@ -59,7 +59,7 @@ Set `GUILD_ID` to make slash commands sync instantly to that server. Run the tes
    <BOT_URL>/ips/<WEBHOOK_SECRET>/downloads_new_version
    ```
    `<BOT_URL>` is `http://flyviking-discord-bot:8080` on the shared Docker network, or `https://<WEBHOOK_HOST>` through Traefik.
-   IPS sends the bare content object with no event name, so the event **must** be in the URL path.
+   IPS also sends the event name in a `Webhook-Event` header, so a **single webhook** with all four events ticked, pointing at `<BOT_URL>/ips/<WEBHOOK_SECRET>`, works too. If an event is in the URL path, it takes precedence over the header.
 3. Set `ANNOUNCEMENT_BLOG_ID` (currently `1`) so that only entries from the announcements blog are posted.
 4. While `WEBHOOK_CAPTURE=true`, every request is saved to `data/webhook_samples/`, with auth headers and member emails/IPs redacted. This is useful for checking what IPS actually sends.
 

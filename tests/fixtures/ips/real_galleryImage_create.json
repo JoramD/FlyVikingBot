@@ -1,0 +1,149 @@
+{
+  "id": 375,
+  "caption": "Screenshot 2026-11-10 113646.png",
+  "description": "",
+  "filename": "Screenshot2026-11-10113646.png",
+  "filesize": 2203833,
+  "images": {
+    "original": "https://flyviking.net/uploads/monthly_2026_11/Screenshot2026-11-10113646.png.3bce450731426fe63ee6af36bb7decc2.png",
+    "large": "https://flyviking.net/uploads/monthly_2026_11/large.Screenshot2026-11-10113646.png.e3c8ab37a128f9eab109ec881fc7757d.png",
+    "small": "https://flyviking.net/uploads/monthly_2026_11/small.Screenshot2026-11-10113646.png.b3f595c68ed05cff55716e04e16a359f.png"
+  },
+  "album": null,
+  "category": {
+    "id": 5,
+    "name": "Microsoft Flight Simulator",
+    "url": "https://flyviking.net/gallery/category/5-microsoft-flight-simulator/",
+    "class": "IPS\\gallery\\Category",
+    "parentId": 0,
+    "permissions": {
+      "perm_id": 70,
+      "perm_view": "4,2,3,6",
+      "perm_2": "4,2,3,6",
+      "perm_3": "4,3,6",
+      "perm_4": "4,3,6",
+      "perm_5": "4,3,6",
+      "perm_6": "4,3,6",
+      "perm_7": null
+    },
+    "club": 0
+  },
+  "author": {
+    "id": 3,
+    "name": "Alexhs2",
+    "title": null,
+    "timeZone": "Europe/Oslo",
+    "formattedName": "Alexhs2",
+    "primaryGroup": {
+      "id": 4,
+      "name": "Administrators",
+      "formattedName": "Administrators"
+    },
+    "secondaryGroups": [],
+    "email": "<redacted>",
+    "joined": "2021-01-23T17:50:55Z",
+    "registrationIpAddress": "<redacted>",
+    "warningPoints": 0,
+    "reputationPoints": 0,
+    "photoUrl": "https://flyviking.net/uploads/monthly_2021_01/fluttershy.png.f28a6d71dabab7fee4ad7cb39e115e1d.png",
+    "photoUrlIsDefault": false,
+    "coverPhotoUrl": "",
+    "profileUrl": "https://flyviking.net/profile/3-alexhs2/",
+    "validating": false,
+    "posts": 195,
+    "lastActivity": "2026-11-12T18:55:23Z",
+    "lastVisit": "2026-11-12T11:12:06Z",
+    "lastPost": "2026-11-12T18:55:24Z",
+    "birthday": "<redacted>",
+    "login_methods": [],
+    "profileViews": 71582,
+    "spammer": false,
+    "banned": false,
+    "customFields": {
+      "1": {
+        "name": "Personal Information",
+        "fields": {
+          "1": {
+            "name": "About Me",
+            "value": null
+          }
+        }
+      },
+      "2": {
+        "name": "Retained",
+        "fields": {
+          "2": {
+            "name": "Member Title",
+            "value": null
+          }
+        }
+      }
+    },
+    "rank": {
+      "id": 6,
+      "name": "Collaborator",
+      "icon": "https://flyviking.net/uploads/monthly_2021_06/7_Collaborator.svg",
+      "points": 800
+    },
+    "achievements_points": 1000,
+    "allowAdminEmails": 1,
+    "completed": 1,
+    "totalMessages": 0,
+    "unreadMessages": 0,
+    "notificationCount": 0,
+    "badges": [
+      {
+        "id": 11,
+        "name": "Dedicated",
+        "statistics": {
+          "badgeCount": 2
+        }
+      },
+      {
+        "id": 14,
+        "name": "One Year In",
+        "statistics": {
+          "badgeCount": 5
+        }
+      },
+      {
+        "id": 6,
+        "name": "Conversation Starter",
+        "statistics": {
+          "badgeCount": 3
+        }
+      },
+      {
+        "id": 12,
+        "name": "Week One Done",
+        "statistics": {
+          "badgeCount": 5
+        }
+      },
+      {
+        "id": 13,
+        "name": "One Month Later",
+        "statistics": {
+          "badgeCount": 5
+        }
+      }
+    ]
+  },
+  "copyright": null,
+  "credit": null,
+  "location": null,
+  "exif": null,
+  "date": "2026-11-12T18:55:24Z",
+  "comments": 0,
+  "reviews": 0,
+  "views": 0,
+  "prefix": null,
+  "tags": [],
+  "locked": false,
+  "hidden": false,
+  "featured": false,
+  "pinned": false,
+  "url": "https://flyviking.net/gallery/image/375-screenshot-2026-11-10-113646png/",
+  "rating": 0,
+  "nsfw": null
+}

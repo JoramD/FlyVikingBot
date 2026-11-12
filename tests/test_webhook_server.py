@@ -41,7 +41,7 @@ async def test_event_from_path(receiver):
 
 async def test_event_from_header(receiver):
     client, received, _ = receiver
-    await client.post(f"/ips/{SECRET}", json={"id": 2}, headers={"X-IPS-Event": "blogEntry_create"})
+    await client.post(f"/ips/{SECRET}", json={"id": 2}, headers={"Webhook-Event": "blogEntry_create"})
     assert received == [("blogEntry_create", {"id": 2})]
 
 
@@ -100,6 +100,24 @@ def test_short_secret_rejected():
         WebhookServer("short", lambda e, p: None)
 
 
-def test_detect_event_from_body():
-    assert detect_event({}, {"event": "downloads_new_version"}) == "downloads_new_version"
-    assert detect_event({"X-Signature": "abc"}, {}) is None
+def test_detect_event_from_ips_header():
+    assert detect_event({"Webhook-Event": "downloads_new_version"}) == "downloads_new_version"
+    assert detect_event({"webhook-event": " blogEntry_create "}) == "blogEntry_create"
+    assert detect_event({"X-Signature": "abc", "Webhook-Event": ""}) is None
+
+
+async def test_path_event_takes_precedence_over_header(receiver):
+    client, received, _ = receiver
+    await client.post(f"/ips/{SECRET}/galleryImage_create", json={"id": 5}, headers={"Webhook-Event": "other"})
+    assert received == [("galleryImage_create", {"id": 5})]
+
+
+async def test_ips_form_content_type_with_json_body(receiver):
+    # IPS labels the JSON body as x-www-form-urlencoded
+    client, received, _ = receiver
+    await client.post(
+        f"/ips/{SECRET}",
+        data=b'{"id": 6}',
+        headers={"Content-Type": "application/x-www-form-urlencoded", "Webhook-Event": "blogEntry_create"},
+    )
+    assert received == [("blogEntry_create", {"id": 6})]

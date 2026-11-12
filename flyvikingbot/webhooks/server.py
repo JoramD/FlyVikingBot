@@ -1,8 +1,8 @@
 """HTTP receiver for Invision Community webhooks.
 
 Routes:
-    POST /ips/{secret}            event name taken from headers/body
-    POST /ips/{secret}/{event}    event name taken from the URL (always reliable)
+    POST /ips/{secret}            event name from the IPS "Webhook-Event" header
+    POST /ips/{secret}/{event}    event name from the URL (takes precedence)
     GET  /health                  liveness probe
 
 The handler answers 200 straight away and hands the event to ``on_event``,
@@ -26,8 +26,8 @@ log = logging.getLogger(__name__)
 EventCallback = Callable[[str, Any], None]
 
 _REDACTED_HEADERS = {"authorization", "cookie", "x-api-key"}
-_EVENT_HEADER_HINTS = ("event",)
-_EVENT_BODY_KEYS = ("event", "eventKey", "event_key", "webhook", "type")
+# IPS 5 sends e.g. "Webhook-Event: blogEntry_create"; the body is the bare content object
+EVENT_HEADER = "webhook-event"
 
 
 # Member personal data IPS includes in author objects; never written to captures
@@ -42,15 +42,10 @@ def redact(value: Any) -> Any:
     return value
 
 
-def detect_event(headers: dict[str, str], body: Any) -> str | None:
+def detect_event(headers: dict[str, str]) -> str | None:
     for name, value in headers.items():
-        lname = name.lower()
-        if lname.startswith("x-") and any(h in lname for h in _EVENT_HEADER_HINTS) and value:
-            return value
-    if isinstance(body, dict):
-        for key in _EVENT_BODY_KEYS:
-            if isinstance(body.get(key), str) and body[key]:
-                return body[key]
+        if name.lower() == EVENT_HEADER and value.strip():
+            return value.strip()
     return None
 
 
@@ -131,7 +126,7 @@ class WebhookServer:
             body = dict(await request.post()) if request.content_type.endswith("form-urlencoded") else None
         headers = {k: v for k, v in request.headers.items()}
 
-        event = request.match_info.get("event") or detect_event(headers, body)
+        event = request.match_info.get("event") or detect_event(headers)
         self._capture(event, headers, body, raw)
 
         if body is None:

@@ -37,12 +37,29 @@ async def test_blog_entry_announces_with_everyone(tmp_path):
 
 async def test_real_ips_blog_entry_payload(tmp_path):
     cog, ch = make_cog(tmp_path, ANNOUNCEMENT_BLOG_ID="1")
-    await cog.handle(ev.BLOG_ENTRY_CREATE, load_fixture("blogEntry_create_real"))
+    await cog.handle(ev.BLOG_ENTRY_CREATE, load_fixture("real_blogEntry_create"))
     call = ch[100].send.await_args
     assert call.args[0] == "@everyone"
-    assert call.kwargs["embed"].title == "Test5"
-    assert call.kwargs["embed"].url == "https://flyviking.net/blogs/entry/17-test5/"
+    assert call.kwargs["embed"].title == "Test9"
+    assert call.kwargs["embed"].url == "https://flyviking.net/blogs/entry/21-test9/"
     assert call.kwargs["embed"].thumbnail.url is None
+
+
+async def test_real_ips_gallery_image_payload(tmp_path):
+    cog, ch = make_cog(tmp_path)
+    await cog.handle(ev.GALLERY_IMAGE_CREATE, load_fixture("real_galleryImage_create"))
+    posted = ch[200].send.await_args.args[0]
+    assert posted.startswith("https://flyviking.net/uploads/monthly_2026_11/large.Screenshot")
+
+
+@pytest.mark.parametrize(
+    ("event", "text"),
+    [(ev.DOWNLOADS_FILE_CREATE, "New file available!"), (ev.DOWNLOADS_NEW_VERSION, "New file version available!")],
+)
+async def test_real_ips_downloads_payloads(tmp_path, event, text):
+    cog, ch = make_cog(tmp_path)
+    await cog.handle(event, load_fixture(f"real_{event}"))
+    assert ch[100].send.await_args.args[0] == f"## [{text}](https://flyviking.net/files/file/34-test/)"
 
 
 async def test_blog_entry_without_image_still_posts(tmp_path):
