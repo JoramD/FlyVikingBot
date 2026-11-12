@@ -12,7 +12,9 @@ BOARD = 631901856997834778
 
 
 def fake_bot(tmp_path, **env):
-    settings = load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path), "CHANNEL_SYSTEM_MESSAGES": "900", **env})
+    base = {**BASE_ENV, "DATA_DIR": str(tmp_path), "CHANNEL_SYSTEM_MESSAGES": "900",
+            "SYSTEM_MESSAGES_ROLE_ID": str(BOARD)}
+    settings = load_settings(env={**base, **env})
     channel = SimpleNamespace(send=AsyncMock())
     return SimpleNamespace(settings=settings, get_channel=lambda cid: channel, fetch_channel=AsyncMock()), channel
 
@@ -96,3 +98,8 @@ async def test_completed_button_staff_only(tmp_path):
     await CompletedButton().callback(interaction)
     assert "Only staff" in interaction.response.send_message.await_args.args[0]
     interaction.response.edit_message.assert_not_awaited()
+
+
+def test_ping_role_unset_means_no_ping(tmp_path):
+    settings = load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path)})
+    assert settings.system_messages_role_id is None  # no hard-coded default; comes from .env

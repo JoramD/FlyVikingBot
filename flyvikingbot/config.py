@@ -103,9 +103,7 @@ def load_settings(
         announcement_blog_id=optional_int("ANNOUNCEMENT_BLOG_ID"),
         channel_flight_logs=optional_int("CHANNEL_FLIGHT_LOGS"),
         channel_system_messages=optional_int("CHANNEL_SYSTEM_MESSAGES"),
-        system_messages_role_id=optional_int("SYSTEM_MESSAGES_ROLE_ID")
-        if "SYSTEM_MESSAGES_ROLE_ID" in env
-        else 631901856997834778,  # @Board of Directors
+        system_messages_role_id=optional_int("SYSTEM_MESSAGES_ROLE_ID"),
         ips_field_fsa_pilot_id=optional_int("IPS_FIELD_FSA_PILOT_ID"),
         ips_field_discord_name=optional_int("IPS_FIELD_DISCORD_NAME"),
         fsa_poll_seconds=max(60, int(get("FSA_POLL_SECONDS", "120"))),
