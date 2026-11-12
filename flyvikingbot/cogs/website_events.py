@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
+import io
 import logging
+import posixpath
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 import aiohttp
 import discord
@@ -18,11 +20,14 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-# Webhooks can arrive before IPS has the image ready. Discord only tries to preview a
-# link once, so wait until the image loads, then a little longer, before posting it.
-IMAGE_CHECK_ATTEMPTS = 10
-IMAGE_CHECK_INTERVAL = 15.0  # seconds between availability checks
-IMAGE_SETTLE_DELAY = 10.0  # extra wait after the image first loads
+# Discord's upload limit for bots in non-boosted servers is 10 MiB; leave headroom
+MAX_UPLOAD_BYTES = 9 * 1024 * 1024
+
+
+def _filename(url: str) -> str:
+    """IPS names files like 'large.Shot.png.<hash>.png'; keep the last path segment."""
+    name = posixpath.basename(urlparse(url).path) or "image.png"
+    return "".join(c if c.isalnum() or c in "-_." else "_" for c in name)[-100:]
 
 
 def announcement_embed(entry: ev.BlogEntry) -> discord.Embed:
@@ -41,26 +46,27 @@ class WebsiteEvents(commands.Cog):
         channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
         return channel  # type: ignore[return-value]
 
-    async def _image_available(self, url: str) -> bool:
-        """True if the URL currently serves an image (headers only; the body isn't downloaded)."""
+    async def _fetch_image(self, url: str) -> bytes | None:
+        """Download an image for re-upload. Returns None if unavailable or too large."""
         session = self.bot.http_session
         if session is None:
-            return False
+            return None
         try:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                return resp.status == 200 and resp.content_type.startswith("image/")
-        except (aiohttp.ClientError, TimeoutError):
-            return False
-
-    async def _wait_for_image(self, url: str) -> bool:
-        for attempt in range(1, IMAGE_CHECK_ATTEMPTS + 1):
-            if await self._image_available(url):
-                await asyncio.sleep(IMAGE_SETTLE_DELAY)
-                return True
-            log.info("Image not available yet (attempt %d/%d): %s", attempt, IMAGE_CHECK_ATTEMPTS, url)
-            if attempt < IMAGE_CHECK_ATTEMPTS:
-                await asyncio.sleep(IMAGE_CHECK_INTERVAL)
-        return False
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                if resp.status != 200:
+                    log.warning("Image download returned HTTP %s: %s", resp.status, url)
+                    return None
+                if (resp.content_length or 0) > MAX_UPLOAD_BYTES:
+                    log.info("Image too large to upload (%s bytes), posting link: %s", resp.content_length, url)
+                    return None
+                data = await resp.content.read(MAX_UPLOAD_BYTES + 1)
+                if len(data) > MAX_UPLOAD_BYTES:
+                    log.info("Image too large to upload, posting link: %s", url)
+                    return None
+                return data
+        except (aiohttp.ClientError, TimeoutError) as exc:
+            log.warning("Image download failed (%s): %s", type(exc).__name__, url)
+            return None
 
     @commands.Cog.listener()
     async def on_ips_webhook(self, event: str, payload: Any) -> None:
@@ -74,10 +80,13 @@ class WebsiteEvents(commands.Cog):
     async def handle(self, event: str, payload: Any) -> None:
         if event == ev.GALLERY_IMAGE_CREATE:
             if image := ev.parse_gallery_image(payload):
-                if not await self._wait_for_image(image.image_url):
-                    log.warning("Image never became available; posting link anyway: %s", image.image_url)
                 channel = await self._channel(self.settings.channel_screenshots)
-                await channel.send(image.image_url)
+                # Upload the image ourselves: Discord can't always unfurl flyviking.net links
+                data = await self._fetch_image(image.image_url)
+                if data:
+                    await channel.send(file=discord.File(io.BytesIO(data), filename=_filename(image.image_url)))
+                else:
+                    await channel.send(image.image_url)
 
         elif event == ev.BLOG_ENTRY_CREATE:
             entry = ev.parse_blog_entry(payload)

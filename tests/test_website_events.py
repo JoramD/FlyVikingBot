@@ -23,24 +23,19 @@ def make_cog(tmp_path, **env):
     return WebsiteEvents(bot), channels
 
 
-@pytest.fixture(autouse=True)
-def no_image_delays(monkeypatch):
-    monkeypatch.setattr(website_events, "IMAGE_CHECK_INTERVAL", 0)
-    monkeypatch.setattr(website_events, "IMAGE_SETTLE_DELAY", 0)
-
-
-async def test_gallery_posts_link_once_image_is_available(tmp_path):
+async def test_gallery_uploads_image_as_attachment(tmp_path):
     cog, ch = make_cog(tmp_path)
-    cog._image_available = AsyncMock(side_effect=[False, False, True])
+    cog._fetch_image = AsyncMock(return_value=b"\x89PNG fake")
     await cog.handle(ev.GALLERY_IMAGE_CREATE, load_fixture("real_galleryImage_create"))
-    assert cog._image_available.await_count == 3
-    posted = ch[200].send.await_args.args[0]
-    assert posted.startswith("https://flyviking.net/uploads/monthly_2026_11/large.Screenshot")
+    cog._fetch_image.assert_awaited_once()
+    assert "/large.Screenshot" in cog._fetch_image.await_args.args[0]
+    file = ch[200].send.await_args.kwargs["file"]
+    assert file.filename.startswith("large.Screenshot") and file.filename.endswith(".png")
     ch[100].send.assert_not_awaited()
 
 
-async def test_gallery_posts_link_even_if_image_never_loads(tmp_path):
-    cog, ch = make_cog(tmp_path)  # http_session=None -> never available
+async def test_gallery_falls_back_to_link_when_download_fails(tmp_path):
+    cog, ch = make_cog(tmp_path)  # http_session=None -> no download possible
     await cog.handle(ev.GALLERY_IMAGE_CREATE, load_fixture("galleryImage_create"))
     ch[200].send.assert_awaited_once()
     assert ch[200].send.await_args.args[0].endswith("sunset.large.jpg")
@@ -50,19 +45,20 @@ async def test_gallery_posts_link_even_if_image_never_loads(tmp_path):
 async def image_server():
     app = web.Application()
     app.router.add_get("/ok.png", lambda r: web.Response(body=b"img", content_type="image/png"))
-    app.router.add_get("/page", lambda r: web.Response(text="<html>", content_type="text/html"))
+    app.router.add_get("/big.png", lambda r: web.Response(body=b"x" * 64, content_type="image/png"))
     async with TestClient(TestServer(app)) as client, aiohttp.ClientSession() as session:
         yield session, str(client.make_url(""))
 
 
-async def test_image_available_against_server(tmp_path, image_server):
+async def test_fetch_image_against_server(tmp_path, image_server, monkeypatch):
     session, base = image_server
     cog, _ = make_cog(tmp_path)
     cog.bot.http_session = session
-    assert await cog._image_available(f"{base}/ok.png") is True
-    assert await cog._image_available(f"{base}/page") is False  # not an image (e.g. error page)
-    assert await cog._image_available(f"{base}/missing.png") is False  # 404
-    assert await cog._image_available("http://127.0.0.1:1/x.png") is False  # unreachable
+    monkeypatch.setattr(website_events, "MAX_UPLOAD_BYTES", 32)
+    assert await cog._fetch_image(f"{base}/ok.png") == b"img"
+    assert await cog._fetch_image(f"{base}/big.png") is None  # over the limit
+    assert await cog._fetch_image(f"{base}/missing.png") is None  # 404
+    assert await cog._fetch_image("http://127.0.0.1:1/x.png") is None  # unreachable
 
 
 async def test_blog_entry_announces_with_everyone(tmp_path):
