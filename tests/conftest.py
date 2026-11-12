@@ -13,6 +13,7 @@ BASE_ENV = {
     "WEBSITE_API_KEY": "web",
     "WEBHOOK_SECRET": "s" * 32,
     "FSA_VA_ID": "42982",
+    "FSA_RANK_ROLES": "Trainee Pilot,First Officer,Senior First Officer,Cargo First Officer,Captain,Cargo Captain",
     "CHANNEL_ANNOUNCEMENTS": "100",
     "CHANNEL_SCREENSHOTS": "200",
 }

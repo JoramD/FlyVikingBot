@@ -8,10 +8,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-DEFAULT_RANK_ROLES = (
-    "Trainee Pilot,First Officer,Senior First Officer,Cargo First Officer,Captain,Cargo Captain"
-)
-
 
 class ConfigError(RuntimeError):
     """A setting is missing or invalid; the bot exits with a readable message."""
@@ -47,7 +43,7 @@ class Settings:
     ips_field_discord_name: int | None
     fsa_poll_seconds: int
     fsa_rank_sync_minutes: int
-    fsa_rank_roles: tuple[str, ...]  # the only Discord roles / website groups the bot may manage for FSA ranks
+    fsa_rank_roles: tuple[str, ...]  # the only Discord roles / website groups managed for FSA ranks; empty = off
     website_rank_sync: bool  # also mirror ranks to website groups (needs member-edit API permission)
     website_member_group: str  # primary group for pilots on an automatic rank
     website_protected_groups: tuple[str, ...]  # primary groups the bot never changes
@@ -127,7 +123,7 @@ def load_settings(
             if n.strip()
         ),
         fsa_rank_roles=tuple(
-            name.strip() for name in get("FSA_RANK_ROLES", DEFAULT_RANK_ROLES).split(",") if name.strip()
+            name.strip() for name in (get("FSA_RANK_ROLES") or "").split(",") if name.strip()
         ),
         data_dir=Path(get("DATA_DIR", "data")),
     )

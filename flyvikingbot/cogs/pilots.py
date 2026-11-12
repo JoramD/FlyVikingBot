@@ -141,6 +141,11 @@ class Pilots(commands.Cog):
         self.bot.remove_dynamic_items(ReviewButton)
 
     @property
+    def rank_roles_enabled(self) -> bool:
+        """Rank roles and website rank groups are only managed when FSA_RANK_ROLES lists some."""
+        return bool(self.settings.fsa_rank_roles)
+
+    @property
     def linking_enabled(self) -> bool:
         return bool(self.settings.ips_field_fsa_pilot_id and self.settings.ips_field_discord_name)
 
@@ -466,7 +471,12 @@ class Pilots(commands.Cog):
         clear: bool = False,
         profile_url: str | None = None,
     ) -> str | None:
-        """Sync a pilot's rank to their Discord roles and website groups. Returns a change summary."""
+        """Sync a pilot's rank to their Discord roles and website groups. Returns a change summary.
+
+        Does nothing while FSA_RANK_ROLES is empty: with no automatic roles every rank would look like a
+        Board rank, which would strip roles and post a Board notice for every pilot."""
+        if not self.rank_roles_enabled:
+            return None
         changes = []
         if member is not None and (
             change := await self.set_rank_role(member, rank_id, clear=clear, profile_url=profile_url)
@@ -639,6 +649,8 @@ class Pilots(commands.Cog):
 
     async def sync_all(self) -> tuple[list[str], int]:
         """Sync every linked member. Returns (changes, unchanged count)."""
+        if not self.rank_roles_enabled:
+            return [], 0
         guild = self.bot.primary_guild()
         ranks_by_pilot = {p.id: p.rank_id for p in await self.bot.fsa.pilot_list()}
         changes, unchanged = [], 0
@@ -685,6 +697,9 @@ class Pilots(commands.Cog):
     @app_commands.guild_only()
     async def sync_rank(self, interaction: discord.Interaction, member: discord.Member | None = None) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
+        if not self.rank_roles_enabled:
+            await interaction.followup.send("Rank roles are switched off (FSA_RANK_ROLES is empty).", ephemeral=True)
+            return
         try:
             if member is None:
                 changes, unchanged = await self.sync_all()

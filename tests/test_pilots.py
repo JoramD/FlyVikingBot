@@ -411,3 +411,24 @@ def test_fsa_sample_redacts_names():
                       "va_user": "FVK009", "email": "a@b.c"}])[0]
     assert out == {"id": 1, "name": "<redacted>", "surname": "<redacted>", "user": "<redacted>",
                    "pic": "<redacted>", "va_user": "FVK009", "email": "<redacted>"}
+
+
+async def test_empty_rank_roles_switch_rank_sync_off(env):
+    """With FSA_RANK_ROLES empty nothing is synced; otherwise every pilot would look like a Board member."""
+    env.cog.settings = dataclasses.replace(env.cog.settings, fsa_rank_roles=())
+    env.cog.set_rank_role = AsyncMock()
+    env.cog.set_website_groups = AsyncMock()
+    assert await env.cog.sync_ranks(env.joram, 1, 2) is None
+    assert await env.cog.sync_all() == ([], 0)
+    env.cog.set_rank_role.assert_not_awaited()
+    env.cog.set_website_groups.assert_not_awaited()
+    interaction = MagicMock()
+    interaction.response.defer = AsyncMock()
+    interaction.followup.send = AsyncMock()
+    await env.cog.sync_rank.callback(env.cog, interaction, member=None)
+    assert "switched off" in interaction.followup.send.await_args.args[0]
+
+
+def test_rank_roles_have_no_built_in_default(tmp_path):
+    env = {k: v for k, v in BASE_ENV.items() if k != "FSA_RANK_ROLES"}
+    assert load_settings(env={**env, "DATA_DIR": str(tmp_path)}).fsa_rank_roles == ()
