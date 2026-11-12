@@ -66,6 +66,16 @@ class WebsiteClient:
                 return groups
             page += 1
 
+    async def list_members(self) -> list[dict[str, Any]]:
+        """All members (paged). Used for on-demand lookups; the API can't filter by profile field."""
+        members, page = [], 1
+        while True:
+            data = await self._get("/core/members", perPage=100, page=page)
+            members += [m for m in data.get("results", []) if isinstance(m, dict)]
+            if page >= int(data.get("totalPages", 1) or 1):
+                return members
+            page += 1
+
     async def get_member(self, member_id: int) -> dict[str, Any]:
         return await self._get(f"/core/members/{member_id}")
 

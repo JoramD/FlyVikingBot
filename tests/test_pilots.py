@@ -251,3 +251,35 @@ async def test_approved_callsign_review_stores_numeric_id(env):
     await env.cog.process_profile(profile(name="Captain Viking", fsa_id="FVK003"))
     assert json.loads(await env.storage.kv_get("review:1"))["fsa_pilot_id"] == "100"
     assert "`FVK003`" in env.bot.post_system_message.await_args.args[0]  # shows what the member typed
+
+
+async def test_on_demand_lookup_links_profile_saved_while_offline(env):
+    env.bot.website = SimpleNamespace(list_members=AsyncMock(return_value=[
+        member_payload(name="Someone", fsa_id="555", discord="someoneelse"),
+        member_payload(name="Joram Davids"),
+    ]))
+    user = SimpleNamespace(id=1, name="joramd")
+    link, note = await env.cog.link_from_website(user)
+    assert link is not None and link.external_id == "100" and note is None
+    env.fsa.pilot.assert_awaited_once()  # only the matching profile was processed
+
+    # Cooldown: an immediate second lookup doesn't hit the website again
+    await env.storage.remove_member(1)
+    assert await env.cog.link_from_website(user) == (None, None)
+    env.bot.website.list_members.assert_awaited_once()
+
+
+async def test_on_demand_lookup_explains_pending_review(env):
+    env.bot.website = SimpleNamespace(list_members=AsyncMock(return_value=[member_payload(name="Captain Viking")]))
+    link, note = await env.cog.link_from_website(SimpleNamespace(id=1, name="joramd"))
+    assert link is None and "needs a quick check by staff" in note and "doesn't match" in note
+
+
+async def test_on_demand_lookup_permission_error_reported_once(env):
+    from flyvikingbot.services.http import ServiceError
+
+    env.bot.website = SimpleNamespace(list_members=AsyncMock(side_effect=ServiceError("NO_PERMISSION")))
+    await env.cog.link_from_website(SimpleNamespace(id=1, name="joramd"))
+    await env.cog.link_from_website(SimpleNamespace(id=2, name="someone"))
+    env.bot.post_system_message.assert_awaited_once()
+    assert "GET /core/members" in env.bot.post_system_message.await_args.args[0]

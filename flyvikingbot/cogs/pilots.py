@@ -30,6 +30,7 @@ log = logging.getLogger(__name__)
 REVIEW_KEY = "review:{}"  # pending staff review, keyed by website member ID
 REVIEW_SENT_KEY = "review-sent:{}:{}"  # (member ID, entered values) already posted for review
 CALLSIGN_KEY = "fsa-callsign:{}"  # callsign/username -> pilot ID cache
+LOOKUP_COOLDOWN_SECONDS = 60  # on-demand website lookups per Discord user
 REPORTED_KEY = "reported:{}"  # problems already reported to staff (cleared once resolved)
 GROUP_CACHE_SECONDS = 3600
 
@@ -125,6 +126,7 @@ class Pilots(commands.Cog):
         self.bot = bot
         self.settings = bot.settings
         self._groups: tuple[float, list[tuple[int, str]]] | None = None
+        self._lookups: dict[int, float] = {}  # Discord user ID -> last on-demand website lookup
 
     async def cog_load(self) -> None:
         self.bot.add_dynamic_items(ReviewButton)
@@ -179,6 +181,43 @@ class Pilots(commands.Cog):
             await self.process_profile(profile)
         except Exception:
             log.exception("Linking failed for website member %s", profile.member_id)
+
+    async def link_from_website(self, user: discord.abc.User) -> tuple[Link | None, str | None]:
+        """On-demand catch-up for an unlinked Discord user: find website members whose "Discord username"
+        field names this user and run them through the normal linking. Covers profiles saved while the bot
+        was offline. Returns (link or None, explanation for the user or None)."""
+        if not self.linking_enabled or self.bot.website is None:
+            return None, None
+        now = time.monotonic()
+        if now - self._lookups.get(user.id, 0) < LOOKUP_COOLDOWN_SECONDS:
+            return None, None
+        self._lookups[user.id] = now
+
+        wanted = {lk.clean_discord_name(user.name)}
+        try:
+            members = await self.bot.website.list_members()
+        except ServiceError as exc:
+            log.warning("Website member lookup failed: %s", exc)
+            await self.report_once(
+                "website-members",
+                f"⚠️ Couldn't search website members ({exc}). Allow the website API key to use GET /core/members, "
+                "so members who filled in their profile while the bot was offline get linked.",
+            )
+            return None, None
+        await self.resolved("website-members")
+
+        note = None
+        for data in members:
+            profile = ev.parse_member_profile(
+                data, self.settings.ips_field_fsa_pilot_id, self.settings.ips_field_discord_name
+            )
+            if profile is None or lk.clean_discord_name(profile.discord_name) not in wanted:
+                continue
+            decision = await self.process_profile(profile)
+            if decision.action is lk.Action.REVIEW:
+                reasons = "\n".join(f"• {r}" for r in decision.reasons)
+                note = f"Your flyviking.net profile was found, but the link needs a quick check by staff:\n{reasons}"
+        return await self.bot.storage.link_by_discord(user.id, lk.SERVICE_FSA), note
 
     async def resolve_entered_pilot(self, entered: str | None) -> str | None:
         """Pilot ID for what the member typed (ID, callsign or FSA username). Callsign lookups are cached,
@@ -645,10 +684,14 @@ class Pilots(commands.Cog):
             await interaction.response.send_message("Use either `member` or `pilot`, not both.", ephemeral=True)
             return
 
+        await interaction.response.defer(thinking=True)
         mention, fsa_id = None, None
         if pilot is None:
             target = member or interaction.user
             link = await self.bot.storage.link_by_discord(target.id, lk.SERVICE_FSA)
+            if link is None:
+                # Not linked yet: the profile may have been filled in while the bot was offline, so check now
+                link, note = await self.link_from_website(target)
             if link is None:
                 if member:
                     msg = f"{member.mention} hasn't linked an FSAirlines pilot."
@@ -659,11 +702,13 @@ class Pilots(commands.Cog):
                         "**FSAirlines Pilot ID** (or callsign) and **Discord username**; the bot links you "
                         "automatically."
                     )
-                await interaction.response.send_message(msg, ephemeral=True)
+                if note and not member:  # review details are only shown to the member themselves
+                    msg = note
+                await interaction.delete_original_response()
+                await interaction.followup.send(msg, ephemeral=True)
                 return
             fsa_id, mention = link.external_id, f"<@{link.discord_id}>"
 
-        await interaction.response.defer(thinking=True)
         try:
             if fsa_id is None:
                 fsa_id = await self.bot.fsa.resolve_pilot_id(pilot)
