@@ -55,6 +55,37 @@ python -m flyvikingbot
 ```
 Set `GUILD_ID` to make slash commands sync instantly to that server. Run the tests with `pytest` and the linter with `ruff check .`.
 
+## External setup checklist
+
+Everything the bot needs outside this repository, in one place. Details follow in the sections below.
+
+**Discord**
+- [ ] Developer Portal → Bot → **Privileged Gateway Intents**: enable **Server Members Intent**. The bot won't start without it.
+- [ ] Invite the bot with the `bot` and `applications.commands` scopes.
+- [ ] Bot permissions in the relevant channels: **View Channel**, **Send Messages**, **Embed Links** (announcements, flight logs, `/pilot`), **Attach Files** (gallery uploads), **Read Message History** + **Manage Messages** (`/clear`), and **Mention @everyone, @here and All Roles** (the `@everyone` announcement and the @Board of Directors ping). Alternatively, make the Board role mentionable.
+- [ ] Server-wide **Manage Roles**, with the bot's role placed **above** the six rank roles.
+- [ ] Roles named exactly like the FSA ranks in `FSA_RANK_ROLES`.
+- [ ] Channels: #announcements, #screenshots, the flight log channel and #system-messages. Put their IDs (and the server and Board role IDs) in `.env`.
+
+**Website (Invision Community ACP)**
+- [ ] REST API key (`WEBSITE_API_KEY`) allowed to use:
+  - `GET /core/search` and `GET /downloads/files/{id}` (`/paint_lookup`)
+  - `GET /core/members` (on-demand linking)
+  - `GET /core/groups`, `GET /core/members/{id}` and `POST /core/members/{id}` (website rank groups)
+- [ ] Webhooks (one per event) to `http://flyviking-discord-bot:8080/ips/<WEBHOOK_SECRET>/<event>`: `galleryImage_create`, `blogEntry_create`, `downloadsFile_create`, `downloads_new_version` and `member_edited`.
+- [ ] Two member-editable profile fields: **FSAirlines Pilot ID** (text; regex `/^\s*(?:FVK\d{3,}|\d+)\s*$/i`) and **Discord Username**. Their IDs go in `IPS_FIELD_FSA_PILOT_ID` / `IPS_FIELD_DISCORD_NAME`.
+- [ ] Secondary member groups named like the rank roles, and a **Members** group.
+- [ ] The **cron** container, which sends the webhooks, on the `flyviking` Docker network, permanently in the website's compose file. It also needs a working cron/task setup.
+
+**FSAirlines**
+- [ ] API key (VA Overview → Edit VA Settings → Api Key Management) in `FSA_API_KEY`. A *site* key locks to the first IP that uses it 100 times, so only use it from the server.
+
+**Uptime Kuma** (optional)
+- [ ] A **Push** monitor (60 s heartbeat). Its push URL goes in `UPTIME_KUMA_URL`; the monitor must not be paused.
+
+**Server**
+- [ ] `docker network create flyviking`, a filled-in `.env` (see `.env.example`), then `docker compose up -d --build`.
+
 ## Setting up the Invision Community webhooks
 
 1. **ACP → REST & OAuth → Webhooks → Create new**, using the API key the webhook should run as.
