@@ -1,0 +1,14 @@
+{
+  "id": 412,
+  "title": "Sunset over BIKF",
+  "description": "<p>Arriving into Keflavik</p>",
+  "filename": "sunset.jpg",
+  "images": {
+    "original": "https://flyviking.net/uploads/monthly_2026_11/sunset.jpg",
+    "large": "https://flyviking.net/uploads/monthly_2026_11/sunset.large.jpg",
+    "small": "https://flyviking.net/uploads/monthly_2026_11/sunset.small.jpg"
+  },
+  "album": null,
+  "author": {"id": 1, "name": "Pilot"},
+  "url": "https://flyviking.net/gallery/image/412-sunset-over-bikf/"
+}

@@ -1,0 +1,80 @@
+import json
+
+import pytest
+from aiohttp.test_utils import TestClient, TestServer
+
+from flyvikingbot.webhooks.server import WebhookServer, detect_event
+
+SECRET = "x" * 32
+
+
+@pytest.fixture
+async def receiver(tmp_path):
+    received = []
+    server = WebhookServer(SECRET, lambda e, p: received.append((e, p)), capture_dir=tmp_path, capture_keep=3)
+    async with TestClient(TestServer(server.app)) as client:
+        yield client, received, tmp_path
+
+
+async def test_health(receiver):
+    client, _, _ = receiver
+    resp = await client.get("/health")
+    assert resp.status == 200
+
+
+async def test_wrong_secret_is_404(receiver):
+    client, received, _ = receiver
+    resp = await client.post("/ips/wrong/galleryImage_create", json={})
+    assert resp.status == 404
+    assert received == []
+
+
+async def test_event_from_path(receiver):
+    client, received, tmp_path = receiver
+    resp = await client.post(f"/ips/{SECRET}/galleryImage_create", json={"id": 1})
+    assert resp.status == 200
+    assert received == [("galleryImage_create", {"id": 1})]
+    captures = list(tmp_path.glob("*.json"))
+    assert len(captures) == 1
+    assert json.loads(captures[0].read_text())["body"] == {"id": 1}
+
+
+async def test_event_from_header(receiver):
+    client, received, _ = receiver
+    await client.post(f"/ips/{SECRET}", json={"id": 2}, headers={"X-IPS-Event": "blogEntry_create"})
+    assert received == [("blogEntry_create", {"id": 2})]
+
+
+async def test_unknown_event_name_not_dispatched(receiver):
+    client, received, tmp_path = receiver
+    resp = await client.post(f"/ips/{SECRET}", json={"id": 3})
+    assert resp.status == 200
+    assert received == []
+    assert len(list(tmp_path.glob("*.json"))) == 1  # still captured for inspection
+
+
+async def test_invalid_json(receiver):
+    client, received, _ = receiver
+    resp = await client.post(f"/ips/{SECRET}/x", data=b"{not json", headers={"Content-Type": "application/json"})
+    assert resp.status == 400
+    assert received == []
+
+
+async def test_capture_pruning_and_redaction(receiver):
+    client, _, tmp_path = receiver
+    for i in range(5):
+        await client.post(f"/ips/{SECRET}/e{i}", json={"i": i}, headers={"Authorization": "Bearer secret"})
+    captures = sorted(tmp_path.glob("*.json"))
+    assert len(captures) == 3
+    record = json.loads(captures[-1].read_text())
+    assert record["headers"]["Authorization"] == "<redacted>"
+
+
+def test_short_secret_rejected():
+    with pytest.raises(ValueError):
+        WebhookServer("short", lambda e, p: None)
+
+
+def test_detect_event_from_body():
+    assert detect_event({}, {"event": "downloads_new_version"}) == "downloads_new_version"
+    assert detect_event({"X-Signature": "abc"}, {}) is None
