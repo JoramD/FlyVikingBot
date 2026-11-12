@@ -11,9 +11,9 @@ services:
       - flyviking
 
 networks:
-  # Shared with the website's cron container (it sends the IPS webhooks) so IPS can POST to
+  # This compose file owns the network. The website's cron container (it sends the IPS webhooks)
+  # joins it as an *external* network, so IPS can POST to
   # http://flyviking-bot:8080/ips/<secret>/<event> without public exposure.
-  # Create once with: docker network create flyviking
+  # Start this stack before the website's, so the network exists.
   flyviking:
     name: ${DOCKER_NETWORK:-flyviking}
-    external: true

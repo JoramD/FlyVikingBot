@@ -45,7 +45,15 @@ python -c "import secrets;print(secrets.token_urlsafe(32))"
 docker compose up -d --build
 ```
 - Logs, the bot's database and captured webhook payloads end up in `./data/`. The container runs as UID 1000, so that folder must be owned by UID 1000 (`mkdir data && sudo chown 1000:1000 data`).
-- The container joins the external Docker network named by `DOCKER_NETWORK` (default `flyviking`, create it once with `docker network create flyviking`). Connect the website's **cron** container to the same network (IPS sends webhooks from its cron task) so IPS can reach the bot at `http://flyviking-bot:8080`; nothing is exposed publicly.
+- This compose file **creates** the Docker network named by `DOCKER_NETWORK` (default `flyviking`). The website's **cron** container (IPS sends webhooks from its cron task) joins it as an external network, so IPS can reach the bot at `http://flyviking-bot:8080`; nothing is exposed publicly. Start the bot's stack before the website's. In the website's `docker-compose.yml`:
+  ```yaml
+  services:
+    cron:                # your cron service
+      networks: [default, flyviking]
+  networks:
+    flyviking:
+      external: true
+  ```
 
 ### Locally
 ```sh
@@ -84,7 +92,7 @@ Everything the bot needs outside this repository, in one place. Details follow i
 - [ ] A **Push** monitor (60 s heartbeat). Its push URL goes in `UPTIME_KUMA_URL`; the monitor must not be paused.
 
 **Server**
-- [ ] `docker network create flyviking`, a `data` folder owned by UID 1000 (`mkdir data && sudo chown 1000:1000 data`), a filled-in `.env` (see `.env.example`), then `docker compose up -d --build`.
+- [ ] A `data` folder owned by UID 1000 (`mkdir data && sudo chown 1000:1000 data`), a filled-in `.env` (see `.env.example`), then `docker compose up -d --build`.
 
 ## Setting up the Invision Community webhooks
 
