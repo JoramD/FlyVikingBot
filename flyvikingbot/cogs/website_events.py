@@ -42,7 +42,11 @@ class WebsiteEvents(commands.Cog):
         self.bot = bot
         self.settings = bot.settings
 
-    async def _channel(self, channel_id: int) -> discord.abc.Messageable:
+    async def _channel(self, channel_id: int | None, setting: str) -> discord.abc.Messageable | None:
+        """The target channel, or None (logged) if its setting is empty, which turns that post type off."""
+        if not channel_id:
+            log.info("%s not set; not posting this website event", setting)
+            return None
         channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
         return channel  # type: ignore[return-value]
 
@@ -89,8 +93,9 @@ class WebsiteEvents(commands.Cog):
 
     async def handle(self, event: str, payload: Any) -> None:
         if event == ev.GALLERY_IMAGE_CREATE:
-            if image := ev.parse_gallery_image(payload):
-                channel = await self._channel(self.settings.channel_screenshots)
+            image = ev.parse_gallery_image(payload)
+            channel = await self._channel(self.settings.channel_screenshots, "CHANNEL_SCREENSHOTS") if image else None
+            if image and channel:
                 # Upload the image ourselves: Discord can't always unfurl flyviking.net links
                 data = await self._fetch_image(image.image_url)
                 if data:
@@ -106,7 +111,9 @@ class WebsiteEvents(commands.Cog):
             if wanted is not None and entry.blog_id != wanted:
                 log.info("Ignoring blog entry %r from blog %s", entry.title, entry.blog_id)
                 return
-            channel = await self._channel(self.settings.channel_announcements)
+            channel = await self._channel(self.settings.channel_announcements, "CHANNEL_ANNOUNCEMENTS")
+            if channel is None:
+                return
             await channel.send(
                 "@everyone",
                 embed=announcement_embed(entry),
@@ -114,13 +121,15 @@ class WebsiteEvents(commands.Cog):
             )
 
         elif event == ev.DOWNLOADS_FILE_CREATE:
-            if file := ev.parse_downloads_file(payload, event):
-                channel = await self._channel(self.settings.channel_announcements)
+            if (file := ev.parse_downloads_file(payload, event)) and (
+                channel := await self._channel(self.settings.channel_announcements, "CHANNEL_ANNOUNCEMENTS")
+            ):
                 await channel.send(f"## [New file available!]({file.url})")
 
         elif event == ev.DOWNLOADS_NEW_VERSION:
-            if file := ev.parse_downloads_file(payload, event):
-                channel = await self._channel(self.settings.channel_announcements)
+            if (file := ev.parse_downloads_file(payload, event)) and (
+                channel := await self._channel(self.settings.channel_announcements, "CHANNEL_ANNOUNCEMENTS")
+            ):
                 await channel.send(f"## [New file version available!]({file.url})")
 
         elif event not in ev.MEMBER_EVENTS:  # member events are handled by the pilots cog

@@ -12,6 +12,7 @@ BASE_ENV = {
     "FSA_API_KEY": "fsa",
     "WEBSITE_API_KEY": "web",
     "WEBHOOK_SECRET": "s" * 32,
+    "FSA_VA_ID": "42982",
     "CHANNEL_ANNOUNCEMENTS": "100",
     "CHANNEL_SCREENSHOTS": "200",
 }

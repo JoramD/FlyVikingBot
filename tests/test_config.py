@@ -24,3 +24,11 @@ def test_bad_number_gives_config_error(tmp_path):
         load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path), "WEBHOOK_PORT": "80a"})
     with pytest.raises(ConfigError, match="GUILD_ID"):
         load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path), "GUILD_ID": "abc"})
+
+
+def test_fsa_va_id_required_and_channels_optional(tmp_path):
+    env = {k: v for k, v in BASE_ENV.items() if k not in ("FSA_VA_ID", "CHANNEL_ANNOUNCEMENTS", "CHANNEL_SCREENSHOTS")}
+    with pytest.raises(ConfigError, match="FSA_VA_ID"):
+        load_settings(env={**env, "DATA_DIR": str(tmp_path)})
+    s = load_settings(env={**env, "FSA_VA_ID": "42982", "DATA_DIR": str(tmp_path)})
+    assert s.channel_announcements is None and s.channel_screenshots is None  # no built-in IDs

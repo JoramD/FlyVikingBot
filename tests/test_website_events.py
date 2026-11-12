@@ -116,3 +116,16 @@ async def test_images_only_downloaded_from_the_website(tmp_path):
         assert await cog._fetch_image(url) is None
     cog.bot.http_session.get.assert_not_called()
     assert cog._is_website_url("https://flyviking.net/uploads/x.png")
+
+
+@pytest.mark.parametrize(
+    ("event", "fixture"),
+    [(ev.GALLERY_IMAGE_CREATE, "real_galleryImage_create"), (ev.BLOG_ENTRY_CREATE, "real_blogEntry_create"),
+     (ev.DOWNLOADS_FILE_CREATE, "real_downloadsFile_create"),
+     (ev.DOWNLOADS_NEW_VERSION, "real_downloads_new_version")],
+)
+async def test_unset_channel_means_not_posted(tmp_path, event, fixture):
+    cog, ch = make_cog(tmp_path, CHANNEL_ANNOUNCEMENTS="", CHANNEL_SCREENSHOTS="")
+    await cog.handle(event, load_fixture(fixture))
+    ch[100].send.assert_not_awaited()
+    ch[200].send.assert_not_awaited()

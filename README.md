@@ -30,7 +30,7 @@ Discord bot for the FlyViking virtual airline, connecting [flyviking.net](https:
 
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in at least `DISCORD_TOKEN`, `FSA_API_KEY`, `WEBSITE_API_KEY` and `WEBHOOK_SECRET`. Every option is documented in `.env.example`.
+Copy `.env.example` to `.env` and fill in at least `DISCORD_TOKEN`, `FSA_API_KEY`, `FSA_VA_ID`, `WEBSITE_API_KEY` and `WEBHOOK_SECRET`. Channel and role IDs have no built-in defaults; a feature whose channel is empty is switched off. Every option is documented in `.env.example`.
 
 Generate the webhook secret with:
 ```sh

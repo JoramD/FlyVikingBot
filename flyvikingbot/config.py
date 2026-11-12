@@ -29,8 +29,8 @@ class Settings:
     uptime_kuma_url: str | None
 
     guild_id: int | None
-    channel_announcements: int
-    channel_screenshots: int
+    channel_announcements: int | None  # blog announcements + new downloads; unset = not posted
+    channel_screenshots: int | None  # new gallery images; unset = not posted
 
     webhook_secret: str
     webhook_bind: str
@@ -100,13 +100,13 @@ def load_settings(
     return Settings(
         discord_token=require("DISCORD_TOKEN"),
         fsa_api_key=require("FSA_API_KEY"),
-        fsa_va_id=int_with_default("FSA_VA_ID", "42982"),
+        fsa_va_id=to_int("FSA_VA_ID", require("FSA_VA_ID")),
         website_api_key=require("WEBSITE_API_KEY"),
         website_base_url=get("WEBSITE_BASE_URL", "https://flyviking.net/api/index.php"),
         uptime_kuma_url=get("UPTIME_KUMA_URL"),
         guild_id=optional_int("GUILD_ID"),
-        channel_announcements=int_with_default("CHANNEL_ANNOUNCEMENTS", "631949277559783457"),
-        channel_screenshots=int_with_default("CHANNEL_SCREENSHOTS", "631950027476172810"),
+        channel_announcements=optional_int("CHANNEL_ANNOUNCEMENTS"),
+        channel_screenshots=optional_int("CHANNEL_SCREENSHOTS"),
         webhook_secret=require("WEBHOOK_SECRET"),
         webhook_bind=get("WEBHOOK_BIND", "0.0.0.0"),
         webhook_port=int_with_default("WEBHOOK_PORT", "8080"),
