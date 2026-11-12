@@ -8,7 +8,6 @@ from discord import app_commands
 from discord.ext import commands
 
 from ..constants import BRAND_COLOUR, EMOJI_FLYVIKING_V
-from ..services.fsairlines import get_airline_stats
 from ..services.http import ServiceError
 
 if TYPE_CHECKING:
@@ -53,9 +52,8 @@ class Airline(commands.Cog):
     @app_commands.command(name="airline_statistics", description="Gets various airline statistics from FSAirlines")
     async def airline_statistics(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(thinking=True)
-        settings = self.bot.settings
         try:
-            data = await get_airline_stats(self.bot.http_session, settings.fsa_va_id, settings.fsa_api_key)
+            data = await self.bot.fsa.airline_stats()
         except ServiceError as exc:
             log.error("Could not retrieve data from FSAirlines: %s", exc)
             await interaction.delete_original_response()

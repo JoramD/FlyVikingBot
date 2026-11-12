@@ -1,3 +1,16 @@
+"""Client for the FSAirlines XML-Interface v2 (JSON mode).
+
+Docs: https://wiki.fsairlines.net/index.php/XML-Interface-v2
+
+Responses look like {"status": "SUCCESS", "data": [...]}. Field formats aren't
+fully documented (numbers may come as strings), so parsing is defensive.
+"""
+
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import aiohttp
@@ -5,14 +18,251 @@ import aiohttp
 from .http import ServiceError, get_json
 
 API_URL = "https://www.fsairlines.net/va_interface2.php"
+RANK_CACHE_SECONDS = 3600
 
 
-async def get_airline_stats(
-    session: aiohttp.ClientSession, va_id: int, api_key: str, api_url: str = API_URL
-) -> dict[str, Any]:
-    params = {"function": "getAirlineStats", "va_id": va_id, "format": "json", "apikey": api_key}
-    data = await get_json(session, api_url, params=params)
-    if not isinstance(data, dict) or data.get("status") != "SUCCESS" or not data.get("data"):
-        status = data.get("status") if isinstance(data, dict) else type(data).__name__
-        raise ServiceError(f"FSAirlines returned an unexpected response (status={status})")
-    return data["data"][0]
+class FsaNotFound(ServiceError):
+    """The requested pilot/flight doesn't exist."""
+
+
+# --- parsing helpers --------------------------------------------------------
+
+
+def _str(value: Any) -> str | None:
+    if value is None:
+        return None
+    s = str(value).strip()
+    return s or None
+
+
+def _int(value: Any) -> int | None:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _float(value: Any) -> float | None:
+    if isinstance(value, str) and ":" in value:  # "HH:MM"
+        try:
+            h, m = value.split(":", 1)
+            return int(h) + int(m[:2]) / 60
+        except ValueError:
+            return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _datetime(value: Any) -> datetime | None:
+    """FSA timestamps may be unix seconds or 'YYYY-MM-DD HH:MM:SS' (assumed UTC)."""
+    if (ts := _int(value)) is not None and ts > 10**8:
+        return datetime.fromtimestamp(ts, UTC)
+    if s := _str(value):
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(s, fmt).replace(tzinfo=UTC)
+            except ValueError:
+                continue
+    return None
+
+
+# --- models -----------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class FlightLog:
+    """A completed flight (FSA calls these 'flight reports')."""
+
+    id: int
+    number: str | None
+    dep: str | None
+    arr: str | None
+    planned_arr: str | None
+    aircraft: str | None
+    pilot_id: str | None
+    pilot_name: str | None
+    hours: float | None
+    distance: float | None
+    rating: float | None
+    pax: int | None
+    cargo_kg: int | None
+    landing_rate: int | None  # vertical speed at touchdown (fpm), detail only
+    flight_type: str | None
+    completed_at: datetime | None
+
+    def merged(self, detail: FlightLog) -> FlightLog:
+        """Fill gaps in this (list) record with values from the detail record."""
+        return FlightLog(**{k: getattr(self, k) if getattr(self, k) is not None else getattr(detail, k)
+                            for k in self.__dataclass_fields__})
+
+
+@dataclass(frozen=True)
+class Pilot:
+    id: str
+    user: str | None
+    name: str | None
+    surname: str | None
+    rank: str | None
+    rank_id: int | None
+    flights: int | None
+    hours: float | None
+    rating: float | None
+    distance: float | None
+    location: str | None
+    last_active: datetime | None
+
+    @property
+    def full_name(self) -> str:
+        return " ".join(p for p in (self.name, self.surname) if p) or self.user or f"Pilot {self.id}"
+
+
+@dataclass(frozen=True)
+class PilotSummary:
+    """Entry of getPilotList."""
+
+    id: str
+    user: str | None
+    name: str | None
+    surname: str | None
+    rank_id: int | None
+
+
+@dataclass(frozen=True)
+class Rank:
+    id: int
+    name: str
+    short: str | None
+
+
+def parse_flight_log(d: dict[str, Any]) -> FlightLog | None:
+    flight_id = _int(d.get("id"))
+    if flight_id is None:
+        return None
+    return FlightLog(
+        id=flight_id,
+        number=_str(d.get("number")),
+        dep=_str(d.get("dep")),
+        arr=_str(d.get("arr")),
+        planned_arr=_str(d.get("pln_arr")),
+        aircraft=_str(d.get("ac_type")),
+        pilot_id=_str(d.get("pilot_id")),
+        pilot_name=_str(d.get("pic")),
+        hours=_float(d.get("hours")),
+        distance=_float(d.get("distance")),
+        rating=_float(d.get("rating")),
+        pax=_int(d.get("pax")),
+        cargo_kg=_int(d.get("cargo_kg")),
+        landing_rate=_int(d.get("vs")),
+        flight_type=_str(d.get("flighttype")),
+        completed_at=_datetime(d.get("ts")) or _datetime(d.get("arrtime")),
+    )
+
+
+def parse_pilot(d: dict[str, Any]) -> Pilot | None:
+    pilot_id = _str(d.get("id"))
+    if pilot_id is None:
+        return None
+    return Pilot(
+        id=pilot_id,
+        user=_str(d.get("user")) or _str(d.get("va_user")),
+        name=_str(d.get("name")),
+        surname=_str(d.get("surname")),
+        rank=_str(d.get("rank")),
+        rank_id=_int(d.get("rank_id")),
+        flights=_int(d.get("flights")),
+        hours=_float(d.get("hours")),
+        rating=_float(d.get("rating")),
+        distance=_float(d.get("distance")),
+        location=_str(d.get("location")),
+        last_active=_datetime(d.get("lastactive") or d.get("last_active")),
+    )
+
+
+def parse_pilot_summary(d: dict[str, Any]) -> PilotSummary | None:
+    pilot_id = _str(d.get("id"))
+    if pilot_id is None:
+        return None
+    return PilotSummary(
+        id=pilot_id,
+        user=_str(d.get("user")) or _str(d.get("va_user")),
+        name=_str(d.get("name")),
+        surname=_str(d.get("surname")),
+        rank_id=_int(d.get("rank_id")),
+    )
+
+
+def parse_rank(d: dict[str, Any]) -> Rank | None:
+    rank_id, name = _int(d.get("id")), _str(d.get("name"))
+    if rank_id is None or not name:
+        return None
+    return Rank(id=rank_id, name=name, short=_str(d.get("short")))
+
+
+def _records(data: Any) -> list[dict[str, Any]]:
+    if isinstance(data, list):
+        return [d for d in data if isinstance(d, dict)]
+    if isinstance(data, dict):
+        # Either a single record, or a mapping of id -> record
+        if all(isinstance(v, dict) for v in data.values()) and data:
+            return list(data.values())
+        return [data]
+    return []
+
+
+# --- client -----------------------------------------------------------------
+
+
+class FsaClient:
+    def __init__(self, session: aiohttp.ClientSession, va_id: int, api_key: str, api_url: str = API_URL) -> None:
+        self._session = session
+        self._va_id = va_id
+        self._api_key = api_key
+        self._api_url = api_url
+        self._ranks: tuple[float, list[Rank]] | None = None
+
+    async def call(self, function: str, **params: Any) -> list[dict[str, Any]]:
+        query = {"function": function, "va_id": self._va_id, "format": "json", "apikey": self._api_key}
+        query.update({k: v for k, v in params.items() if v is not None})
+        data = await get_json(self._session, self._api_url, params=query)
+        if not isinstance(data, dict):
+            raise ServiceError(f"FSAirlines {function}: unexpected response type {type(data).__name__}")
+        status = str(data.get("status", "")).upper()
+        if status == "SUCCESS":
+            return _records(data.get("data"))
+        if "NOT FOUND" in status or "NO DATA" in status:
+            raise FsaNotFound(f"FSAirlines {function}: {status}")
+        raise ServiceError(f"FSAirlines {function} failed (status={status or 'missing'})")
+
+    async def airline_stats(self) -> dict[str, Any]:
+        records = await self.call("getAirlineStats")
+        if not records:
+            raise ServiceError("FSAirlines getAirlineStats returned no data")
+        return records[0]
+
+    async def flight_logs(self, count: int = 15, pilot_id: str | None = None) -> list[FlightLog]:
+        records = await self.call("getFlightReports", count=count, pilot_id=pilot_id)
+        logs = [log for r in records if (log := parse_flight_log(r))]
+        return sorted(logs, key=lambda log: log.id)
+
+    async def flight_detail(self, flight_id: int) -> FlightLog | None:
+        records = await self.call("getReportDetail", report_id=flight_id)
+        return parse_flight_log(records[0]) if records else None
+
+    async def pilot(self, pilot_id: str) -> Pilot:
+        records = await self.call("getPilotData", pilot_id=pilot_id)
+        pilot = parse_pilot(records[0]) if records else None
+        if pilot is None:
+            raise FsaNotFound(f"FSAirlines pilot {pilot_id} not found")
+        return pilot
+
+    async def pilot_list(self) -> list[PilotSummary]:
+        return [p for r in await self.call("getPilotList") if (p := parse_pilot_summary(r))]
+
+    async def ranks(self) -> list[Rank]:
+        if self._ranks and time.monotonic() - self._ranks[0] < RANK_CACHE_SECONDS:
+            return self._ranks[1]
+        ranks = [r for d in await self.call("getRankList") if (r := parse_rank(d))]
+        self._ranks = (time.monotonic(), ranks)
+        return ranks

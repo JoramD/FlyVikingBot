@@ -3,7 +3,6 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
-from flyvikingbot.services.fsairlines import get_airline_stats
 from flyvikingbot.services.http import ServiceError
 from flyvikingbot.services.website import WebsiteClient
 
@@ -81,13 +80,3 @@ async def test_network_error_does_not_leak_key():
         with pytest.raises(ServiceError) as info:
             await website.search_files("x")
     assert "secret-key" not in str(info.value)
-
-
-async def test_fsairlines(api):
-    fake, session, base = api
-    url = f"{base}/va_interface2.php"
-    assert (await get_airline_stats(session, 42982, "k", api_url=url))["flights"] == "10"
-    assert "va_id=42982" in fake.requests[-1]
-    fake.fsa = (200, {"status": "FAILURE"})
-    with pytest.raises(ServiceError):
-        await get_airline_stats(session, 1, "k", api_url=url)

@@ -46,7 +46,20 @@ class Settings:
     webhook_capture_keep: int
     announcement_blog_id: int | None
 
+    # FSAirlines integration (each feature is disabled while its setting is unset)
+    channel_flight_logs: int | None
+    channel_system_messages: int | None
+    ips_field_fsa_pilot_id: int | None
+    ips_field_discord_name: int | None
+    fsa_poll_seconds: int
+    fsa_rank_sync_minutes: int
+
     data_dir: Path
+
+    @property
+    def website_root(self) -> str:
+        """Public site root, derived from the API URL (https://flyviking.net/api/index.php -> https://flyviking.net/)."""
+        return self.website_base_url.split("/api/", 1)[0].rstrip("/") + "/"
 
 
 def _load_legacy(path: Path) -> dict[str, str]:
@@ -106,5 +119,11 @@ def load_settings(
         webhook_capture=_bool(get("WEBHOOK_CAPTURE", "true")),
         webhook_capture_keep=int(get("WEBHOOK_CAPTURE_KEEP", "50")),
         announcement_blog_id=optional_int("ANNOUNCEMENT_BLOG_ID"),
+        channel_flight_logs=optional_int("CHANNEL_FLIGHT_LOGS"),
+        channel_system_messages=optional_int("CHANNEL_SYSTEM_MESSAGES"),
+        ips_field_fsa_pilot_id=optional_int("IPS_FIELD_FSA_PILOT_ID"),
+        ips_field_discord_name=optional_int("IPS_FIELD_DISCORD_NAME"),
+        fsa_poll_seconds=max(60, int(get("FSA_POLL_SECONDS", "120"))),
+        fsa_rank_sync_minutes=max(5, int(get("FSA_RANK_SYNC_MINUTES", "60"))),
         data_dir=Path(get("DATA_DIR", "data")),
     )
