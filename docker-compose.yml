@@ -1,16 +1,29 @@
-version: '3.9'
-
 services:
   discord-bot:
     build: .
     image: joramd/flyviking-discord-bot
     container_name: flyviking-discord-bot
     restart: always
-    stop_signal: SIGKILL # Skip grace period
+    env_file: .env
     volumes:
-      - ./discordBot.log:/app/discordBot.log
-      - ./announcement_rss_trackfile:/app/announcement_rss_trackfile
-      - ./gallery_rss_trackfile:/app/gallery_rss_trackfile
-      - ./aivlasoft_rss_trackfile:/app/aivlasoft_rss_trackfile
-      - ./downloads_rss_trackfile:/app/downloads_rss_trackfile
-      - ./downloads_update_rss_trackfile:/app/downloads_update_rss_trackfile
+      - ./data:/app/data
+    networks:
+      - flyviking
+    labels:
+      # Optional public webhook endpoint via Traefik, only needed if the website can't
+      # reach the bot over a shared Docker network. Enable with WEBHOOK_PUBLIC=true;
+      # Traefik must then be attached to the same network (or set DOCKER_NETWORK to Traefik's).
+      - traefik.enable=${WEBHOOK_PUBLIC:-false}
+      - traefik.docker.network=${DOCKER_NETWORK:-flyviking}
+      - traefik.http.routers.flyviking-bot.rule=Host(`${WEBHOOK_HOST:-bot.example.com}`) && PathPrefix(`/ips/`)
+      - traefik.http.routers.flyviking-bot.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+      - traefik.http.routers.flyviking-bot.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      - traefik.http.services.flyviking-bot.loadbalancer.server.port=8080
+
+networks:
+  # Shared with the website container so IPS can POST to
+  # http://flyviking-discord-bot:8080/ips/<secret>/<event> without public exposure.
+  # Create once with: docker network create flyviking
+  flyviking:
+    name: ${DOCKER_NETWORK:-flyviking}
+    external: true

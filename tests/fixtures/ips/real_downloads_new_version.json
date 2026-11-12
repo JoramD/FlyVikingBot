@@ -1,0 +1,185 @@
+{
+  "id": 34,
+  "title": "Test",
+  "category": {
+    "id": 6,
+    "name": "GSX Configurations",
+    "url": "https://flyviking.net/files/category/6-gsx-configurations/",
+    "class": "IPS\\downloads\\Category",
+    "parentId": 5,
+    "permissions": {
+      "perm_id": 99,
+      "perm_view": "*",
+      "perm_2": "*",
+      "perm_3": "4,6,8",
+      "perm_4": "*",
+      "perm_5": "4,3,6",
+      "perm_6": "4,6",
+      "perm_7": null
+    },
+    "club": 0
+  },
+  "author": {
+    "id": 1,
+    "name": "JoramD",
+    "title": null,
+    "timeZone": "Europe/Amsterdam",
+    "formattedName": "JoramD",
+    "primaryGroup": {
+      "id": 4,
+      "name": "Administrators",
+      "formattedName": "Administrators"
+    },
+    "secondaryGroups": [],
+    "email": "<redacted>",
+    "joined": "2021-01-23T11:46:06Z",
+    "registrationIpAddress": "<redacted>",
+    "warningPoints": 0,
+    "reputationPoints": 0,
+    "photoUrl": "https://flyviking.net/uploads/monthly_2021_01/JD-LOGO-Squared.png.0375235449ea9abb3c3c8eac48651d62.png",
+    "photoUrlIsDefault": false,
+    "coverPhotoUrl": "https://flyviking.net/uploads/monthly_2021_01/FlyVikingWebsiteBG.jpg.18e79a510b650e97f0f80d2fd579e002.jpg",
+    "profileUrl": "https://flyviking.net/profile/1-joramd/",
+    "validating": false,
+    "posts": 122,
+    "lastActivity": "2026-11-12T18:52:42Z",
+    "lastVisit": "2026-11-07T12:12:45Z",
+    "lastPost": "2026-11-12T18:52:18Z",
+    "birthday": "<redacted>",
+    "login_methods": [],
+    "profileViews": 86704,
+    "spammer": false,
+    "banned": false,
+    "customFields": {
+      "1": {
+        "name": "Personal Information",
+        "fields": {
+          "1": {
+            "name": "About Me",
+            "value": null
+          }
+        }
+      },
+      "2": {
+        "name": "Retained",
+        "fields": {
+          "2": {
+            "name": "Member Title",
+            "value": null
+          }
+        }
+      }
+    },
+    "rank": {
+      "id": 6,
+      "name": "Collaborator",
+      "icon": "https://flyviking.net/uploads/monthly_2021_06/7_Collaborator.svg",
+      "points": 800
+    },
+    "achievements_points": 830,
+    "allowAdminEmails": 0,
+    "completed": 1,
+    "totalMessages": 0,
+    "unreadMessages": 0,
+    "notificationCount": 1,
+    "badges": [
+      {
+        "id": 7,
+        "name": "Collaborator",
+        "statistics": {
+          "badgeCount": 1
+        }
+      },
+      {
+        "id": 5,
+        "name": "First Post",
+        "statistics": {
+          "badgeCount": 1
+        }
+      },
+      {
+        "id": 11,
+        "name": "Dedicated",
+        "statistics": {
+          "badgeCount": 2
+        }
+      },
+      {
+        "id": 6,
+        "name": "Conversation Starter",
+        "statistics": {
+          "badgeCount": 3
+        }
+      },
+      {
+        "id": 14,
+        "name": "One Year In",
+        "statistics": {
+          "badgeCount": 5
+        }
+      },
+      {
+        "id": 12,
+        "name": "Week One Done",
+        "statistics": {
+          "badgeCount": 5
+        }
+      },
+      {
+        "id": 13,
+        "name": "One Month Later",
+        "statistics": {
+          "badgeCount": 5
+        }
+      }
+    ]
+  },
+  "date": "2026-11-12T18:52:18Z",
+  "updated": "2026-11-12T18:53:45Z",
+  "published": "2026-11-12T18:53:45Z",
+  "description": "<p>This is a test</p>",
+  "version": "2.0.0",
+  "changelog": "",
+  "screenshots": [],
+  "screenshotsThumbnails": [],
+  "primaryScreenshot": null,
+  "primaryScreenshotThumb": null,
+  "downloads": 0,
+  "comments": 0,
+  "reviews": 0,
+  "views": 0,
+  "prefix": null,
+  "tags": [],
+  "locked": false,
+  "hidden": false,
+  "pinned": false,
+  "featured": false,
+  "url": "https://flyviking.net/files/file/34-test/",
+  "topic": null,
+  "isPaid": false,
+  "isPurchasable": false,
+  "prices": null,
+  "canDownload": null,
+  "canBuy": null,
+  "canReview": null,
+  "rating": 0,
+  "purchases": null,
+  "renewalTerm": null,
+  "hasPendingVersion": false,
+  "customFields": {
+    "4": {
+      "id": 4,
+      "name": "Compatible Product(s)",
+      "description": "A link to the product this file was design/made for",
+      "value": "<p>N/A</p>",
+      "displayValue": "<p>N/A</p>"
+    },
+    "3": {
+      "id": 3,
+      "name": "Instructions",
+      "description": "",
+      "value": "<p>N/A</p>",
+      "displayValue": "<p>N/A</p>"
+    }
+  }
+}

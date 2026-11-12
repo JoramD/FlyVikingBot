@@ -1,7 +1,12 @@
 credentials.json
+.env
+data/
 __pycache__
+*.egg-info/
 .venv
 .vscode
+.pytest_cache
+.ruff_cache
 run_windows.bat
 discordBot.log
 *_rss_trackfile
