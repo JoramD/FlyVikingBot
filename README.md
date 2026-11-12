@@ -37,8 +37,8 @@ python -c "import secrets;print(secrets.token_urlsafe(32))"
 docker compose up -d --build
 ```
 - Logs, and captured webhook payloads, end up in `./data/`.
-- The container joins the external Docker network named by `DOCKER_NETWORK` (default `traefik`).
-- If the website is on the same network, IPS can reach the bot directly at `http://flyviking-discord-bot:8080`. Otherwise set `WEBHOOK_PUBLIC=true` and `WEBHOOK_HOST` to expose `/ips/*` through Traefik.
+- The container joins the external Docker network named by `DOCKER_NETWORK` (default `flyviking`, create it once with `docker network create flyviking`). Connect the website container to the same network so IPS can reach the bot at `http://flyviking-discord-bot:8080`; nothing needs to be public.
+- Only if the website can't share that network: set `WEBHOOK_PUBLIC=true` and `WEBHOOK_HOST` to expose `/ips/*` through Traefik (Traefik must be attached to the same network).
 
 ### Locally
 ```sh
