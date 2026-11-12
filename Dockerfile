@@ -10,9 +10,14 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY flyvikingbot ./flyvikingbot
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
-RUN useradd --system --uid 1000 bot && mkdir -p /app/data && chown bot /app/data
-USER bot
+# Runs as root only long enough for the entrypoint to fix ./data ownership, then drops to "bot"
+RUN useradd --system --uid 1000 --user-group bot \
+    && mkdir -p /app/data && chown bot:bot /app/data \
+    && sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh \
+    && chmod +x /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["docker-entrypoint.sh"]
 
 EXPOSE 8080
 HEALTHCHECK --interval=60s --timeout=5s --start-period=30s \
