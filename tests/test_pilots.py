@@ -58,7 +58,6 @@ async def env(tmp_path):
     settings = load_settings(
         env={**BASE_ENV, "DATA_DIR": str(tmp_path), "IPS_FIELD_FSA_PILOT_ID": str(FSA_FIELD),
              "IPS_FIELD_DISCORD_NAME": str(DISCORD_FIELD), "CHANNEL_SYSTEM_MESSAGES": "900"},
-        credentials_path=tmp_path / "none",
     )
     storage = Storage(tmp_path / "db.sqlite")
     await storage.init()

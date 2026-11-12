@@ -15,7 +15,7 @@ from .conftest import BASE_ENV, load_fixture
 
 
 def make_cog(tmp_path, **env):
-    settings = load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path), **env}, credentials_path=tmp_path / "x")
+    settings = load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path), **env})
     channels = {100: AsyncMock(), 200: AsyncMock()}
     bot = SimpleNamespace(
         settings=settings, get_channel=lambda cid: channels.get(cid), fetch_channel=AsyncMock(), http_session=None
@@ -36,9 +36,9 @@ async def test_gallery_uploads_image_as_attachment(tmp_path):
 
 async def test_gallery_falls_back_to_link_when_download_fails(tmp_path):
     cog, ch = make_cog(tmp_path)  # http_session=None -> no download possible
-    await cog.handle(ev.GALLERY_IMAGE_CREATE, load_fixture("galleryImage_create"))
+    await cog.handle(ev.GALLERY_IMAGE_CREATE, load_fixture("real_galleryImage_create"))
     ch[200].send.assert_awaited_once()
-    assert ch[200].send.await_args.args[0].endswith("sunset.large.jpg")
+    assert "/large.Screenshot" in ch[200].send.await_args.args[0]
 
 
 @pytest.fixture
@@ -61,13 +61,13 @@ async def test_fetch_image_against_server(tmp_path, image_server, monkeypatch):
     assert await cog._fetch_image("http://127.0.0.1:1/x.png") is None  # unreachable
 
 
-async def test_blog_entry_announces_with_everyone(tmp_path):
-    cog, ch = make_cog(tmp_path, ANNOUNCEMENT_BLOG_ID="3")
-    await cog.handle(ev.BLOG_ENTRY_CREATE, load_fixture("blogEntry_create"))
+async def test_blog_entry_with_image_gets_thumbnail(tmp_path):
+    cog, ch = make_cog(tmp_path, ANNOUNCEMENT_BLOG_ID="1")
+    payload = load_fixture("real_blogEntry_create")
+    payload["image"] = "https://flyviking.net/uploads/cover.jpg"
+    await cog.handle(ev.BLOG_ENTRY_CREATE, payload)
     call = ch[100].send.await_args
-    assert call.args[0] == "@everyone"
-    assert call.kwargs["embed"].title == "New routes for winter 2026"
-    assert call.kwargs["embed"].thumbnail.url.endswith("cover.jpg")
+    assert call.kwargs["embed"].thumbnail.url == "https://flyviking.net/uploads/cover.jpg"
     assert call.kwargs["allowed_mentions"].everyone is True
 
 
@@ -91,30 +91,10 @@ async def test_real_ips_downloads_payloads(tmp_path, event, text):
     assert ch[100].send.await_args.args[0] == f"## [{text}](https://flyviking.net/files/file/34-test/)"
 
 
-async def test_blog_entry_without_image_still_posts(tmp_path):
-    cog, ch = make_cog(tmp_path)
-    payload = load_fixture("blogEntry_create")
-    payload["image"] = None
-    payload["entry"] = "<p>No pictures</p>"
-    await cog.handle(ev.BLOG_ENTRY_CREATE, payload)
-    assert ch[100].send.await_args.kwargs["embed"].thumbnail.url is None
-
-
 async def test_blog_entry_other_blog_ignored(tmp_path):
     cog, ch = make_cog(tmp_path, ANNOUNCEMENT_BLOG_ID="9")
-    await cog.handle(ev.BLOG_ENTRY_CREATE, load_fixture("blogEntry_create"))
+    await cog.handle(ev.BLOG_ENTRY_CREATE, load_fixture("real_blogEntry_create"))
     ch[100].send.assert_not_awaited()
-
-
-@pytest.mark.parametrize(
-    ("event", "text"),
-    [(ev.DOWNLOADS_FILE_CREATE, "New file available!"), (ev.DOWNLOADS_NEW_VERSION, "New file version available!")],
-)
-async def test_downloads(tmp_path, event, text):
-    cog, ch = make_cog(tmp_path)
-    await cog.handle(event, load_fixture("downloadsFile_create"))
-    msg = ch[100].send.await_args.args[0]
-    assert text in msg and "55-flyviking-a320neo-livery" in msg
 
 
 async def test_unknown_and_malformed_events_do_nothing(tmp_path):

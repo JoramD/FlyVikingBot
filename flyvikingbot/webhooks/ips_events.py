@@ -1,9 +1,8 @@
 """Invision Community 5 webhook events and payload extraction.
 
-The payloads are expected to follow the IPS REST API object shapes (GalleryImage,
-BlogEntry, DownloadsFile). Until real samples are captured, every extractor is
-defensive: a missing optional field just means less detail in the Discord post,
-and a missing required field returns ``None`` (and gets logged) instead of crashing.
+Payloads are the IPS REST API objects (GalleryImage, BlogEntry, DownloadsFile, Member),
+verified against real captures in tests/fixtures/ips/. A missing optional field just means
+less detail in the Discord post; a missing required field returns ``None`` (and is logged).
 """
 
 from __future__ import annotations
@@ -25,9 +24,6 @@ MEMBER_EDITED = "member_edited"
 MEMBER_REGISTRATION_COMPLETE = "member_registration_complete"
 MEMBER_EVENTS = frozenset({MEMBER_EDITED, MEMBER_REGISTRATION_COMPLETE})
 
-KNOWN_EVENTS = frozenset(
-    {GALLERY_IMAGE_CREATE, BLOG_ENTRY_CREATE, DOWNLOADS_FILE_CREATE, DOWNLOADS_NEW_VERSION} | MEMBER_EVENTS
-)
 
 _IMG_SRC = re.compile(r"<img[^>]+src=[\"']([^\"']+)[\"']", re.IGNORECASE)
 
@@ -55,16 +51,12 @@ class DownloadsFile:
 
 
 def unwrap(payload: Any) -> dict[str, Any]:
-    """Return the content object, whether IPS sends it bare or wrapped in an envelope."""
-    if isinstance(payload, list) and payload and isinstance(payload[0], dict):
-        payload = payload[0]
+    """Return the content object. IPS 5 sends content bare, and member events as
+    {"member": {...}, "changes": {...}}."""
     if not isinstance(payload, dict):
         return {}
-    for key in ("member", "data", "item", "content", "payload"):  # member_edited: {"member": ..., "changes": ...}
-        inner = payload.get(key)
-        if "url" not in payload and isinstance(inner, dict):
-            return inner
-    return payload
+    member = payload.get("member")
+    return member if isinstance(member, dict) and "url" not in payload else payload
 
 
 def _str(value: Any) -> str | None:
@@ -99,12 +91,7 @@ def _missing(event: str, field: str, data: dict[str, Any]) -> None:
 
 def parse_gallery_image(payload: Any) -> GalleryImage | None:
     data = unwrap(payload)
-    image_url = _first(
-        _nested(data, "images", "large"),
-        _nested(data, "images", "original"),
-        _nested(data, "images", "medium"),
-        data.get("image"),
-    )
+    image_url = _first(_nested(data, "images", "large"), _nested(data, "images", "original"))
     if not image_url:
         _missing(GALLERY_IMAGE_CREATE, "images", data)
         return None
@@ -119,18 +106,15 @@ def parse_blog_entry(payload: Any) -> BlogEntry | None:
         return None
     blog = data.get("blog")
     blog_id = _int(blog.get("id")) if isinstance(blog, dict) else _int(blog)
-    image_url = _first(data.get("image"), data.get("coverPhoto"), _nested(data, "coverPhoto", "url"))
-    body = _str(data.get("entry") or data.get("content"))
+    image_url = _str(data.get("image"))  # cover photo, if set
+    body = _str(data.get("entry"))
     if not image_url and body and (match := _IMG_SRC.search(body)):
         image_url = match.group(1)
     return BlogEntry(title=title, url=url, blog_id=blog_id, image_url=image_url)
 
 
 def parse_downloads_file(payload: Any, event: str = DOWNLOADS_FILE_CREATE) -> DownloadsFile | None:
-    data = unwrap(payload)
-    # A "new version" event may carry the file nested in the version object
-    if not _str(data.get("url")) and isinstance(data.get("file"), dict):
-        data = data["file"]
+    data = unwrap(payload)  # downloads_new_version sends the same File object as downloadsFile_create
     url = _str(data.get("url"))
     if not url:
         _missing(event, "url", data)

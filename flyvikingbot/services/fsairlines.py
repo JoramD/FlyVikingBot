@@ -90,7 +90,6 @@ class FlightLog:
     pax: int | None
     cargo_kg: int | None
     landing_rate: int | None  # vertical speed at touchdown (fpm)
-    flight_type: str | None
     completed_at: datetime | None
     callsign: str | None = None  # pilot's VA callsign, e.g. FVK004
     packages_kg: int | None = None
@@ -171,7 +170,6 @@ def parse_flight_log(d: dict[str, Any]) -> FlightLog | None:
         pax=_int(d.get("pax")),
         cargo_kg=_int(d.get("cargo_kg")),
         landing_rate=_int(d.get("vs")),
-        flight_type=_str(d.get("flighttype")),
         completed_at=_datetime(d.get("ts")),  # deptime/arrtime are HHMM clock times, not timestamps
         callsign=_str(d.get("pid")),
         packages_kg=_int(d.get("packages_kg")),
@@ -228,14 +226,7 @@ def parse_rank(d: dict[str, Any]) -> Rank | None:
 
 
 def _records(data: Any) -> list[dict[str, Any]]:
-    if isinstance(data, list):
-        return [d for d in data if isinstance(d, dict)]
-    if isinstance(data, dict):
-        # Either a single record, or a mapping of id -> record
-        if all(isinstance(v, dict) for v in data.values()) and data:
-            return list(data.values())
-        return [data]
-    return []
+    return [d for d in data if isinstance(d, dict)] if isinstance(data, list) else []
 
 
 # --- client -----------------------------------------------------------------
@@ -258,7 +249,7 @@ class FsaClient:
         status = str(data.get("status", "")).upper()
         if status == "SUCCESS":
             return _records(data.get("data"))
-        if "NOT FOUND" in status or "NO DATA" in status:
+        if "NOT FOUND" in status:
             raise FsaNotFound(f"FSAirlines {function}: {status}")
         raise ServiceError(f"FSAirlines {function} failed (status={status or 'missing'})")
 

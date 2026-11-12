@@ -12,8 +12,7 @@ BOARD = 631901856997834778
 
 
 def fake_bot(tmp_path, **env):
-    settings = load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path), "CHANNEL_SYSTEM_MESSAGES": "900", **env},
-                             credentials_path=tmp_path / "none")
+    settings = load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path), "CHANNEL_SYSTEM_MESSAGES": "900", **env})
     channel = SimpleNamespace(send=AsyncMock())
     return SimpleNamespace(settings=settings, get_channel=lambda cid: channel, fetch_channel=AsyncMock()), channel
 

@@ -9,7 +9,7 @@ from .conftest import BASE_ENV
 
 
 async def make_bot(tmp_path, **env):
-    settings = load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path), **env}, credentials_path=tmp_path / "x")
+    settings = load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path), **env})
     bot = FlyVikingBot(settings)
     await bot._async_setup_hook()  # what login() does
     bot.load_extension = AsyncMock()

@@ -31,7 +31,6 @@ def ips_member(primary=3, secondary=()):
 async def env(tmp_path):
     settings = load_settings(
         env={**BASE_ENV, "DATA_DIR": str(tmp_path), "WEBSITE_RANK_SYNC": "true", "CHANNEL_SYSTEM_MESSAGES": "900"},
-        credentials_path=tmp_path / "none",
     )
     storage = Storage(tmp_path / "db.sqlite")
     await storage.init()
@@ -116,7 +115,7 @@ async def test_clear_on_unlink(env):
 
 async def test_disabled_by_default_and_unknown_rank_skipped(env):
     assert await env.cog.set_website_groups(1, None) is None  # no rank from FSA: don't touch
-    env.cog.settings = load_settings(env={**BASE_ENV, "DATA_DIR": "x"}, credentials_path="none")
+    env.cog.settings = load_settings(env={**BASE_ENV, "DATA_DIR": "x"})
     assert env.cog.settings.website_rank_sync is False
     assert await env.cog.set_website_groups(1, 2) is None
     env.website.get_member.assert_not_awaited()

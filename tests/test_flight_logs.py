@@ -13,7 +13,7 @@ from flyvikingbot.storage import Storage
 def flight(fid, **kw):
     base = dict(number=f"FV{fid}", dep="BIKF", arr="EGLL", planned_arr="EGLL", aircraft="B738", pilot_id="7",
                 pilot_name="Jan Jansen", hours=2.5, distance=1032.4, rating=9.5, pax=150, cargo_kg=0,
-                landing_rate=None, flight_type=None, completed_at=None)
+                landing_rate=None, completed_at=None)
     return FlightLog(id=fid, **{**base, **kw})
 
 

@@ -74,7 +74,7 @@ class FlyVikingBot(commands.Bot):
             synced = await self.tree.sync()
         log.info("Synced %d application commands", len(synced))
 
-        await self.webhook_server.start(self.settings.webhook_host, self.settings.webhook_port)
+        await self.webhook_server.start(self.settings.webhook_bind, self.settings.webhook_port)
 
     def primary_guild(self) -> discord.Guild | None:
         """The FlyViking server: GUILD_ID if set, otherwise the only guild the bot is in."""

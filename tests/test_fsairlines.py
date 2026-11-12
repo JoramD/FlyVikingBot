@@ -76,7 +76,7 @@ async def test_ranks_cached(fsa):
     fake, client = fsa
     fake.responses["getRankList"] = {
         "status": "SUCCESS",
-        "data": {"1": {"id": "1", "name": "Cadet", "short": "CDT"}, "2": {"id": "2", "name": "Captain"}},
+        "data": [{"id": "1", "name": "Cadet", "short": "CDT"}, {"id": "2", "name": "Captain"}],
     }
     first = await client.ranks()
     second = await client.ranks()

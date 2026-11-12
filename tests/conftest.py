@@ -23,4 +23,4 @@ def load_fixture(name: str):
 
 @pytest.fixture
 def settings(tmp_path):
-    return load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path)}, credentials_path=tmp_path / "none.json")
+    return load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path)})
