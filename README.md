@@ -8,6 +8,13 @@ Discord bot for the FlyViking virtual airline, connecting [flyviking.net](https:
 - `/airline_statistics`: airline-wide statistics from FSAirlines
 - `/paint_lookup <query>`: find an aircraft paint in the website's downloads
 - `/clear <amount>`: delete the last 1–50 messages (administrators only)
+- `/pilot [member] [pilot_id]`: FSAirlines pilot stats. Shows rank, hours, flights, average rating, distance, location, last active and last flight. With no option it shows your own linked pilot.
+- `/sync_rank [member]`: sync FSAirlines rank roles right away (staff with Manage Roles only)
+
+**FSAirlines → Discord**
+- **Flight logs:** every flight completed in FSAirlines is posted to #flight-logs within about 2 minutes. It shows route, aircraft, block time, distance, landing rate and rating, and an @mention if the pilot is linked.
+- **Account linking:** members fill in *FSAirlines Pilot ID* and *Discord username* on their flyviking.net profile, and the bot links them automatically. Anything it can't verify, such as an unknown user, a name mismatch or an account that's already linked, goes to #system-messages with the member's profile link and Approve/Reject buttons.
+- **Rank roles:** linked members get the Discord role named after their FSAirlines rank (or its short name). It syncs hourly and right after linking. Ranks without a matching role are reported to #system-messages.
 
 **Website → Discord** (via Invision Community webhooks)
 | IPS event | Discord |
@@ -71,13 +78,36 @@ Set `GUILD_ID` to make slash commands sync instantly to that server. Run the tes
 
 Health check: `GET /health`.
 
+## Setting up the FSAirlines integration
+
+1. **Website (ACP):**
+   - Create two custom profile fields, both editable by members: **FSAirlines Pilot ID** and **Discord username**. Put their IDs in `IPS_FIELD_FSA_PILOT_ID` and `IPS_FIELD_DISCORD_NAME`.
+   - Add a webhook for the `member_edited` event (optionally also `member_registration_complete`): `<BOT_URL>/ips/<WEBHOOK_SECRET>/member_edited`.
+2. **Discord:**
+   - Enable the **Server Members Intent** for the bot in the Discord Developer Portal (Bot → Privileged Gateway Intents). The bot won't start without it.
+   - Create #flight-logs, and pick a staff channel for system messages.
+   - Create a role for each FSAirlines rank, named exactly after the rank (or its short name).
+   - Move the bot's role **above** those rank roles, and give it Manage Roles.
+3. Set `CHANNEL_FLIGHT_LOGS` and `CHANNEL_SYSTEM_MESSAGES` in `.env`, then run `docker compose up -d --build`.
+
+The flight log feed starts from the newest existing flight and doesn't post the backlog.
+
+**FSAirlines API key caution:** a *site* API key locks to the first IP that uses it 100 times. Only call the FSAirlines API from the server. To capture real responses, e.g. for test fixtures, run this on the server:
+```sh
+docker compose exec discord-bot python -m flyvikingbot.tools.fsa_sample [pilot_id]
+```
+It makes about 5 calls and writes them, with personal data redacted, to `data/fsa_samples/`.
+
 ## Project layout
 ```
 flyvikingbot/
-  bot.py              bot class: HTTP session, cogs, slash command sync, webhook server
+  bot.py              bot class: HTTP session, storage, cogs, slash command sync, webhook server
   config.py           settings from env / .env
-  cogs/               one module per feature (airline, website, admin, status, website_events)
+  storage.py          SQLite (data/flyviking.db): account links and small bot state
+  linking.py          pure link-decision and rank-role logic
+  cogs/               one module per feature (airline, website, admin, status, website_events, flight_logs, pilots)
   services/           async API clients (FSAirlines, Invision Community)
   webhooks/           webhook HTTP receiver and IPS payload parsing
+  tools/              maintenance scripts (fsa_sample)
 tests/
 ```

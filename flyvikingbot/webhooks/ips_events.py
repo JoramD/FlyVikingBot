@@ -8,6 +8,7 @@ and a missing required field returns ``None`` (and gets logged) instead of crash
 
 from __future__ import annotations
 
+import html
 import logging
 import re
 from dataclasses import dataclass
@@ -20,7 +21,13 @@ BLOG_ENTRY_CREATE = "blogEntry_create"
 DOWNLOADS_FILE_CREATE = "downloadsFile_create"
 DOWNLOADS_NEW_VERSION = "downloads_new_version"
 
-KNOWN_EVENTS = frozenset({GALLERY_IMAGE_CREATE, BLOG_ENTRY_CREATE, DOWNLOADS_FILE_CREATE, DOWNLOADS_NEW_VERSION})
+MEMBER_EDITED = "member_edited"
+MEMBER_REGISTRATION_COMPLETE = "member_registration_complete"
+MEMBER_EVENTS = frozenset({MEMBER_EDITED, MEMBER_REGISTRATION_COMPLETE})
+
+KNOWN_EVENTS = frozenset(
+    {GALLERY_IMAGE_CREATE, BLOG_ENTRY_CREATE, DOWNLOADS_FILE_CREATE, DOWNLOADS_NEW_VERSION} | MEMBER_EVENTS
+)
 
 _IMG_SRC = re.compile(r"<img[^>]+src=[\"']([^\"']+)[\"']", re.IGNORECASE)
 
@@ -129,3 +136,53 @@ def parse_downloads_file(payload: Any, event: str = DOWNLOADS_FILE_CREATE) -> Do
         _missing(event, "url", data)
         return None
     return DownloadsFile(title=_str(data.get("title")), url=url, version=_str(data.get("version")))
+
+
+# --- members ------------------------------------------------------------------
+
+_TAG = re.compile(r"<[^>]+>")
+
+
+@dataclass(frozen=True)
+class MemberProfile:
+    member_id: int
+    name: str | None
+    profile_url: str | None
+    fsa_pilot_id: str | None
+    discord_name: str | None
+
+
+def _custom_field(data: dict[str, Any], field_id: int | None) -> str | None:
+    """Find a custom profile field by ID. IPS nests them as
+    {"<group id>": {"name": ..., "fields": {"<field id>": {"name": ..., "value": ...}}}}."""
+    if field_id is None:
+        return None
+    groups = data.get("customFields")
+    if not isinstance(groups, dict):
+        return None
+    for group in groups.values():
+        fields = group.get("fields") if isinstance(group, dict) else None
+        if isinstance(fields, dict) and isinstance(field := fields.get(str(field_id)), dict):
+            value = field.get("value")
+            if value is None:
+                return None
+            text = html.unescape(_TAG.sub(" ", str(value)))
+            return " ".join(text.split()) or None
+    return None
+
+
+def parse_member_profile(
+    payload: Any, fsa_field_id: int | None, discord_field_id: int | None
+) -> MemberProfile | None:
+    data = unwrap(payload)
+    member_id = _int(data.get("id"))
+    if member_id is None:
+        _missing(MEMBER_EDITED, "id", data)
+        return None
+    return MemberProfile(
+        member_id=member_id,
+        name=_str(data.get("name")),
+        profile_url=_str(data.get("profileUrl")),
+        fsa_pilot_id=_custom_field(data, fsa_field_id),
+        discord_name=_custom_field(data, discord_field_id),
+    )

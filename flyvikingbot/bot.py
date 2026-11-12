@@ -8,7 +8,9 @@ import discord
 from discord.ext import commands
 
 from .config import Settings
+from .services.fsairlines import FsaClient
 from .services.website import WebsiteClient
+from .storage import Storage
 from .webhooks.server import WebhookServer
 
 log = logging.getLogger(__name__)
@@ -19,19 +21,25 @@ EXTENSIONS = (
     "flyvikingbot.cogs.airline",
     "flyvikingbot.cogs.website",
     "flyvikingbot.cogs.admin",
+    "flyvikingbot.cogs.flight_logs",
+    "flyvikingbot.cogs.pilots",
 )
 
 
 class FlyVikingBot(commands.Bot):
     def __init__(self, settings: Settings) -> None:
+        intents = discord.Intents.default()
+        intents.members = True  # privileged: find members by username + manage rank roles
         super().__init__(
             command_prefix=commands.when_mentioned,  # slash commands only; no message content needed
-            intents=discord.Intents.default(),
+            intents=intents,
             allowed_mentions=discord.AllowedMentions.none(),
         )
         self.settings = settings
         self.http_session: aiohttp.ClientSession | None = None
         self.website: WebsiteClient | None = None
+        self.fsa: FsaClient | None = None
+        self.storage = Storage(settings.data_dir / "flyviking.db")
         self.webhook_server = WebhookServer(
             secret=settings.webhook_secret,
             on_event=self._on_webhook,
@@ -46,6 +54,8 @@ class FlyVikingBot(commands.Bot):
     async def setup_hook(self) -> None:
         self.http_session = aiohttp.ClientSession(headers={"User-Agent": "FlyVikingBot"})
         self.website = WebsiteClient(self.http_session, self.settings.website_base_url, self.settings.website_api_key)
+        self.fsa = FsaClient(self.http_session, self.settings.fsa_va_id, self.settings.fsa_api_key)
+        await self.storage.init()
 
         for ext in EXTENSIONS:
             await self.load_extension(ext)
@@ -59,6 +69,25 @@ class FlyVikingBot(commands.Bot):
         log.info("Synced %d application commands", len(synced))
 
         await self.webhook_server.start(self.settings.webhook_host, self.settings.webhook_port)
+
+    def primary_guild(self) -> discord.Guild | None:
+        """The FlyViking server: GUILD_ID if set, otherwise the only guild the bot is in."""
+        if self.settings.guild_id:
+            return self.get_guild(self.settings.guild_id)
+        return self.guilds[0] if len(self.guilds) == 1 else None
+
+    async def post_system_message(self, content: str, **kwargs: Any) -> discord.Message | None:
+        """Post to #system-messages (staff). Logs instead if the channel isn't configured."""
+        channel_id = self.settings.channel_system_messages
+        if not channel_id:
+            log.warning("System message (CHANNEL_SYSTEM_MESSAGES not set): %s", content)
+            return None
+        try:
+            channel = self.get_channel(channel_id) or await self.fetch_channel(channel_id)
+            return await channel.send(content, allowed_mentions=discord.AllowedMentions.none(), **kwargs)
+        except discord.HTTPException:
+            log.exception("Failed to post system message: %s", content)
+            return None
 
     async def on_ready(self) -> None:
         log.info("Logged in as %s (%s)", self.user, getattr(self.user, "id", "?"))

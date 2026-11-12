@@ -113,7 +113,7 @@ class WebsiteEvents(commands.Cog):
                 channel = await self._channel(self.settings.channel_announcements)
                 await channel.send(f"## [New file version available!]({file.url})")
 
-        else:
+        elif event not in ev.MEMBER_EVENTS:  # member events are handled by the pilots cog
             log.info("Ignoring unhandled webhook event %s", event)
 
 
