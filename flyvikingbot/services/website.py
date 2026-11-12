@@ -9,7 +9,7 @@ from urllib.parse import urlencode
 import aiohttp
 from yarl import URL
 
-from .http import ServiceError, get_json
+from .http import ServiceError, request_json
 
 
 @dataclass
@@ -31,7 +31,10 @@ class WebsiteClient:
         return URL(f"{self._base_url}?{endpoint}&{query}", encoded=True)
 
     async def _get(self, endpoint: str, **params: Any) -> Any:
-        data = await get_json(self._session, self.build_url(endpoint, **params))
+        return await self._request("GET", endpoint, params)
+
+    async def _request(self, method: str, endpoint: str, params: dict[str, Any], data: Any = None) -> Any:
+        data = await request_json(self._session, method, self.build_url(endpoint, **params), data=data)
         if not isinstance(data, dict):
             raise ServiceError(f"Website returned unexpected data for {endpoint}")
         if "errorCode" in data:
@@ -50,3 +53,31 @@ class WebsiteClient:
 
     async def get_file(self, file_id: int) -> dict[str, Any]:
         return await self._get(f"/downloads/files/{file_id}")
+
+    # --- members & groups -------------------------------------------------------------------
+
+    async def list_groups(self) -> list[tuple[int, str]]:
+        """All member groups as (id, name)."""
+        groups, page = [], 1
+        while True:
+            data = await self._get("/core/groups", perPage=100, page=page)
+            groups += [(int(g["id"]), str(g.get("name", ""))) for g in data.get("results", []) if "id" in g]
+            if page >= int(data.get("totalPages", 1) or 1):
+                return groups
+            page += 1
+
+    async def get_member(self, member_id: int) -> dict[str, Any]:
+        return await self._get(f"/core/members/{member_id}")
+
+    async def set_secondary_groups(self, member_id: int, group_ids: list[int]) -> dict[str, Any]:
+        """Replace a member's secondary groups. Nothing else about the member is changed."""
+        form = [("secondaryGroups[]", str(g)) for g in group_ids] or [("secondaryGroups", "")]
+        return await self._request("POST", f"/core/members/{member_id}", {}, data=form)
+
+
+def member_group_ids(member: dict[str, Any]) -> tuple[int | None, set[int]]:
+    """(primary group ID, secondary group IDs) from an IPS member object."""
+    primary = member.get("primaryGroup") or {}
+    secondary = member.get("secondaryGroups") or []
+    primary_id = int(primary["id"]) if isinstance(primary, dict) and "id" in primary else None
+    return primary_id, {int(g["id"]) for g in secondary if isinstance(g, dict) and "id" in g}

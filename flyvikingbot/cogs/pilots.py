@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from typing import TYPE_CHECKING, Any
 
 import discord
@@ -15,6 +16,7 @@ from .. import linking as lk
 from ..constants import BRAND_COLOUR
 from ..services.fsairlines import FsaNotFound, Pilot
 from ..services.http import ServiceError
+from ..services.website import member_group_ids
 from ..storage import Link
 from ..webhooks import ips_events as ev
 from .flight_logs import format_hours
@@ -26,6 +28,7 @@ log = logging.getLogger(__name__)
 
 REVIEW_KEY = "review:{}"  # pending staff review, keyed by website member ID
 REPORTED_KEY = "reported:{}"  # problems already reported to staff (cleared once resolved)
+GROUP_CACHE_SECONDS = 3600
 
 
 def _profile_link(url: str | None) -> str:
@@ -108,6 +111,7 @@ class Pilots(commands.Cog):
     def __init__(self, bot: FlyVikingBot) -> None:
         self.bot = bot
         self.settings = bot.settings
+        self._groups: tuple[float, list[tuple[int, str]]] | None = None
 
     async def cog_load(self) -> None:
         self.bot.add_dynamic_items(ReviewButton)
@@ -266,27 +270,38 @@ class Pilots(commands.Cog):
         )
 
     async def apply_link(self, profile: ev.MemberProfile, discord_id: int, source: str, pilot: Pilot | None) -> None:
-        displaced = await self.bot.storage.save_link(
+        storage, pilot_id = self.bot.storage, profile.fsa_pilot_id.strip()
+        # Links that this one replaces, captured before saving (their website accounts lose rank groups)
+        previous = [
+            link
+            for link in (
+                await storage.link_by_external(lk.SERVICE_FSA, pilot_id),
+                await storage.link_by_discord(discord_id, lk.SERVICE_FSA),
+            )
+            if link and link.ips_member_id not in (None, profile.member_id)
+        ]
+        displaced = await storage.save_link(
             discord_id=discord_id,
             ips_member_id=profile.member_id,
             ips_profile_url=profile.profile_url,
             discord_name=profile.discord_name,
             service=lk.SERVICE_FSA,
-            external_id=profile.fsa_pilot_id.strip(),
+            external_id=pilot_id,
             source=source,
         )
         guild = self.bot.primary_guild()
-        if guild:
-            for other in displaced:
-                if member := guild.get_member(other):
-                    await self.set_rank_role(member, None, clear=True)
-            if pilot and (member := guild.get_member(discord_id)):
-                await self.set_rank_role(member, pilot.rank_id, profile_url=profile.profile_url)
+        for other in displaced:
+            await self.sync_ranks(guild.get_member(other) if guild else None, None, None, clear=True)
+        for old in previous:
+            await self.sync_ranks(None, old.ips_member_id, None, clear=True)
+        if pilot:
+            member = guild.get_member(discord_id) if guild else None
+            await self.sync_ranks(member, profile.member_id, pilot.rank_id, profile_url=profile.profile_url)
 
     async def apply_unlink(self, link: Link) -> None:
         guild = self.bot.primary_guild()
-        if guild and (member := guild.get_member(link.discord_id)):
-            await self.set_rank_role(member, None, clear=True)
+        member = guild.get_member(link.discord_id) if guild else None
+        await self.sync_ranks(member, link.ips_member_id, None, clear=True)
         await self.bot.storage.remove_member(link.discord_id)
 
     # --- rank roles ---------------------------------------------------------------------------------------------------
@@ -312,6 +327,74 @@ class Pilots(commands.Cog):
                 f"⚠️ Rank role '{allowed[key]}' is listed in FSA_RANK_ROLES but doesn't exist in Discord.",
             )
         return lk.map_ranks_to_roles(ranks, roles), {r.id for r in roles}
+
+    async def sync_ranks(
+        self,
+        member: discord.Member | None,
+        ips_member_id: int | None,
+        rank_id: int | None,
+        *,
+        clear: bool = False,
+        profile_url: str | None = None,
+    ) -> str | None:
+        """Sync a pilot's rank to their Discord roles and website groups. Returns a change summary."""
+        changes = []
+        if member is not None and (
+            change := await self.set_rank_role(member, rank_id, clear=clear, profile_url=profile_url)
+        ):
+            changes.append(change)
+        if ips_member_id is not None:
+            label = member.mention if member else f"website member {ips_member_id}"
+            if change := await self.set_website_groups(ips_member_id, rank_id, clear=clear, label=label):
+                changes.append(change)
+        return "; ".join(changes) or None
+
+    async def website_group_map(self) -> tuple[dict[int, int | None], set[int]]:
+        """Like rank_role_map, for website member groups (cached for an hour)."""
+        now = time.monotonic()
+        if self._groups is None or now - self._groups[0] > GROUP_CACHE_SECONDS:
+            self._groups = (now, await self.bot.website.list_groups())
+        allowed = {lk.normalize(name): name for name in self.settings.fsa_rank_roles}
+        groups = [lk.RoleRef(gid, name) for gid, name in self._groups[1] if lk.normalize(name) in allowed]
+        for key in sorted(allowed.keys() - {lk.normalize(g.name) for g in groups}):
+            await self.report_once(
+                f"rank-group-missing:{key}",
+                f"⚠️ Rank group '{allowed[key]}' (FSA_RANK_ROLES) doesn't exist on the website. "
+                f"Create a secondary member group with that name.",
+            )
+        return lk.map_ranks_to_roles(await self.bot.fsa.ranks(), groups), {g.id for g in groups}
+
+    async def set_website_groups(
+        self, ips_member_id: int, rank_id: int | None, *, clear: bool = False, label: str = ""
+    ) -> str | None:
+        """Mirror the FSA rank to the member's website secondary groups. The primary group is never changed."""
+        if not self.settings.website_rank_sync or (rank_id is None and not clear):
+            return None
+        try:
+            mapping, managed = await self.website_group_map()
+            primary, secondary = member_group_ids(await self.bot.website.get_member(ips_member_id))
+            target = None if clear else mapping.get(rank_id)
+            if target is not None and target == primary:
+                target = None  # already their primary group; just drop other rank groups
+            to_add, to_remove = lk.role_changes(secondary, managed, target)
+            if to_add or to_remove:
+                await self.bot.website.set_secondary_groups(ips_member_id, sorted((secondary - to_remove) | to_add))
+        except ServiceError as exc:
+            await self.report_once(
+                "website-groups",
+                f"⚠️ Couldn't update website rank groups ({exc}). Check that the website API key may use "
+                "GET /core/groups and GET + POST /core/members/{id}.",
+            )
+            return None
+        await self.resolved("website-groups")
+        if not to_add and not to_remove:
+            return None
+        names = dict(self._groups[1]) if self._groups else {}
+
+        def names_of(ids: set[int]) -> str:
+            return ", ".join(names.get(i, str(i)) for i in sorted(ids)) or "none"
+
+        return f"{label} (website): {names_of(to_remove)} → {names_of(to_add)}"
 
     async def set_rank_role(
         self, member: discord.Member, rank_id: int | None, *, clear: bool = False, profile_url: str | None = None
@@ -385,24 +468,22 @@ class Pilots(commands.Cog):
     async def sync_all(self) -> tuple[list[str], int]:
         """Sync every linked member. Returns (changes, unchanged count)."""
         guild = self.bot.primary_guild()
-        if guild is None:
-            return [], 0
         ranks_by_pilot = {p.id: p.rank_id for p in await self.bot.fsa.pilot_list()}
         changes, unchanged = [], 0
         for link in await self.bot.storage.all_links(lk.SERVICE_FSA):
-            member = guild.get_member(link.discord_id)
-            if member is None:
-                continue  # left the server
+            # A member who left the Discord server still gets their website groups synced
+            member = guild.get_member(link.discord_id) if guild else None
             if link.external_id not in ranks_by_pilot:
                 await self.report_once(
                     f"pilot-missing:{link.external_id}",
-                    f"⚠️ {member.mention} is linked to FSAirlines pilot `{link.external_id}`, which no longer exists. "
+                    f"⚠️ <@{link.discord_id}> is linked to FSAirlines pilot `{link.external_id}`, "
+                    "which no longer exists. "
                     f"· {_profile_link(link.ips_profile_url)}",
                 )
                 continue
             await self.resolved(f"pilot-missing:{link.external_id}")
             rank_id = ranks_by_pilot[link.external_id]
-            change = await self.set_rank_role(member, rank_id, profile_url=link.ips_profile_url)
+            change = await self.sync_ranks(member, link.ips_member_id, rank_id, profile_url=link.ips_profile_url)
             if change:
                 changes.append(change)
             else:
@@ -444,7 +525,9 @@ class Pilots(commands.Cog):
                 await interaction.followup.send(msg, ephemeral=True)
                 return
             pilot = await self.bot.fsa.pilot(link.external_id)
-            change = await self.set_rank_role(member, pilot.rank_id, profile_url=link.ips_profile_url)
+            change = await self.sync_ranks(
+                member, link.ips_member_id, pilot.rank_id, profile_url=link.ips_profile_url
+            )
             await interaction.followup.send(
                 change or f"{member.mention} is already up to date ({pilot.rank or 'unknown rank'}).", ephemeral=True
             )

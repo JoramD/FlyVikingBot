@@ -20,9 +20,14 @@ async def get_json(session: aiohttp.ClientSession, url: str | URL, **kwargs: Any
     FSAirlines APIs return error details as JSON. The query string (which may
     hold API keys) is never included in error messages.
     """
+    return await request_json(session, "GET", url, **kwargs)
+
+
+async def request_json(session: aiohttp.ClientSession, method: str, url: str | URL, **kwargs: Any) -> Any:
+    """Like get_json, for any HTTP method (e.g. POST with data=...)."""
     safe_url = URL(str(url)).with_query(None)
     try:
-        async with session.get(url, timeout=DEFAULT_TIMEOUT, **kwargs) as resp:
+        async with session.request(method, url, timeout=DEFAULT_TIMEOUT, **kwargs) as resp:
             return await resp.json(content_type=None)
     except (aiohttp.ClientError, TimeoutError, ValueError) as exc:
-        raise ServiceError(f"Request to {safe_url} failed: {type(exc).__name__}") from exc
+        raise ServiceError(f"{method} {safe_url} failed: {type(exc).__name__}") from exc

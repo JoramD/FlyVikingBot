@@ -15,6 +15,7 @@ Discord bot for the FlyViking virtual airline, connecting [flyviking.net](https:
 - **Flight logs:** every flight completed in FSAirlines is posted to #flight-logs within about 2 minutes. It shows route, aircraft, block time, distance, landing rate and rating, and an @mention if the pilot is linked.
 - **Account linking:** members fill in *FSAirlines Pilot ID* and *Discord username* on their flyviking.net profile, and the bot links them automatically. Anything it can't verify, such as an unknown user, a name mismatch or an account that's already linked, goes to #system-messages with the member's profile link and Approve/Reject buttons.
 - **Rank roles:** linked members get the Discord role named after their FSAirlines rank (or its short name). It syncs hourly and right after linking. Only the roles listed in `FSA_RANK_ROLES` are ever assigned or removed. A pilot on any other rank, such as Board of Directors, loses those rank roles and gets nothing automatically. #system-messages is told once, with their profile link, so staff can assign the Board role by hand.
+- **Website rank groups** (optional, `WEBSITE_RANK_SYNC=true`): the same rank is mirrored to a website **secondary** member group with the same name. Only those allowlisted groups are touched, and the primary group never is. This prepares for rank-restricted content later.
 
 **Website → Discord** (via Invision Community webhooks)
 | IPS event | Discord |
@@ -88,7 +89,8 @@ Health check: `GET /health`.
    - Create #flight-logs, and pick a staff channel for system messages.
    - Create a role for each FSAirlines rank that should be assigned automatically, named exactly after the rank (or its short name), and list them in `FSA_RANK_ROLES`.
    - Move the bot's role **above** those rank roles, and give it Manage Roles.
-3. Set `CHANNEL_FLIGHT_LOGS` and `CHANNEL_SYSTEM_MESSAGES` in `.env`, then run `docker compose up -d --build`.
+3. *(Optional) Website rank groups:* create secondary member groups named like the rank roles. Allow the website API key to use `GET /core/groups` and `GET` + `POST /core/members/{id}`, then set `WEBSITE_RANK_SYNC=true`.
+4. Set `CHANNEL_FLIGHT_LOGS` and `CHANNEL_SYSTEM_MESSAGES` in `.env`, then run `docker compose up -d --build`.
 
 The flight log feed starts from the newest existing flight and doesn't post the backlog.
 
