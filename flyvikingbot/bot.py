@@ -11,6 +11,7 @@ from .config import Settings
 from .services.fsairlines import FsaClient
 from .services.website import WebsiteClient
 from .storage import Storage
+from .system_messages import CompletedButton, completed_view
 from .webhooks.server import WebhookServer
 
 log = logging.getLogger(__name__)
@@ -56,6 +57,7 @@ class FlyVikingBot(commands.Bot):
         self.website = WebsiteClient(self.http_session, self.settings.website_base_url, self.settings.website_api_key)
         self.fsa = FsaClient(self.http_session, self.settings.fsa_va_id, self.settings.fsa_api_key)
         await self.storage.init()
+        self.add_dynamic_items(CompletedButton)  # persistent "Completed" buttons on #system-messages
 
         for ext in EXTENSIONS:
             await self.load_extension(ext)
@@ -86,8 +88,9 @@ class FlyVikingBot(commands.Bot):
         """Post to #system-messages (staff). Logs instead if the channel isn't configured.
 
         RULE: every post must say whether staff need to act. Posts that need action ping the
-        staff role (SYSTEM_MESSAGES_ROLE_ID, @Board of Directors); purely informational posts
-        don't. The argument is deliberately required so new features can't skip the decision.
+        staff role (SYSTEM_MESSAGES_ROLE_ID, @Board of Directors) and get a "Completed" button
+        (unless they bring their own buttons, e.g. Approve/Reject); informational posts don't.
+        The argument is deliberately required so new features can't skip the decision.
         Only that role can be pinged; user mentions in the text never notify anyone.
         """
         channel_id = self.settings.channel_system_messages
@@ -100,6 +103,8 @@ class FlyVikingBot(commands.Bot):
             mentions = discord.AllowedMentions(everyone=False, users=False, roles=[discord.Object(id=role_id)])
         else:
             mentions = discord.AllowedMentions.none()
+        if action_required and "view" not in kwargs:
+            kwargs["view"] = completed_view()  # staff mark it done; posts with their own buttons keep those
         try:
             channel = self.get_channel(channel_id) or await self.fetch_channel(channel_id)
             return await channel.send(content, allowed_mentions=mentions, **kwargs)
