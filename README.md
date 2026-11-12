@@ -45,7 +45,7 @@ python -c "import secrets;print(secrets.token_urlsafe(32))"
 docker compose up -d --build
 ```
 - Logs, the bot's database and captured webhook payloads end up in `./data/`. The container runs as UID 1000, so that folder must be owned by UID 1000 (`mkdir data && sudo chown 1000:1000 data`).
-- The container joins the external Docker network named by `DOCKER_NETWORK` (default `flyviking`, create it once with `docker network create flyviking`). Connect the website's **cron** container to the same network (IPS sends webhooks from its cron task) so IPS can reach the bot at `http://flyviking-discord-bot:8080`; nothing is exposed publicly.
+- The container joins the external Docker network named by `DOCKER_NETWORK` (default `flyviking`, create it once with `docker network create flyviking`). Connect the website's **cron** container to the same network (IPS sends webhooks from its cron task) so IPS can reach the bot at `http://flyviking-bot:8080`; nothing is exposed publicly.
 
 ### Locally
 ```sh
@@ -72,7 +72,7 @@ Everything the bot needs outside this repository, in one place. Details follow i
   - `GET /core/search` and `GET /downloads/files/{id}` (`/paint_lookup`)
   - `GET /core/members` (on-demand linking)
   - `GET /core/groups`, `GET /core/members/{id}` and `POST /core/members/{id}` (website rank groups)
-- [ ] Webhooks (one per event) to `http://flyviking-discord-bot:8080/ips/<WEBHOOK_SECRET>/<event>`: `galleryImage_create`, `blogEntry_create`, `downloadsFile_create`, `downloads_new_version` and `member_edited`.
+- [ ] Webhooks (one per event) to `http://flyviking-bot:8080/ips/<WEBHOOK_SECRET>/<event>`: `galleryImage_create`, `blogEntry_create`, `downloadsFile_create`, `downloads_new_version` and `member_edited`.
 - [ ] Two member-editable profile fields: **FSAirlines Pilot ID** (text; regex `/^\s*(?:FVK\d{3,}|\d+)\s*$/i`) and **Discord Username**. Their IDs go in `IPS_FIELD_FSA_PILOT_ID` / `IPS_FIELD_DISCORD_NAME`.
 - [ ] Secondary member groups named like the rank roles, and a **Members** group.
 - [ ] The **cron** container, which sends the webhooks, on the `flyviking` Docker network, permanently in the website's compose file. It also needs a working cron/task setup.
@@ -96,13 +96,13 @@ Everything the bot needs outside this repository, in one place. Details follow i
    <BOT_URL>/ips/<WEBHOOK_SECRET>/downloadsFile_create
    <BOT_URL>/ips/<WEBHOOK_SECRET>/downloads_new_version
    ```
-   `<BOT_URL>` is `http://flyviking-discord-bot:8080` on the shared Docker network.
+   `<BOT_URL>` is `http://flyviking-bot:8080` on the shared Docker network.
    IPS also sends the event name in a `Webhook-Event` header, so a **single webhook** with all four events ticked, pointing at `<BOT_URL>/ips/<WEBHOOK_SECRET>`, works too. If an event is in the URL path, it takes precedence over the header.
 3. Set `ANNOUNCEMENT_BLOG_ID` (currently `1`) so that only entries from the announcements blog are posted.
 4. With `WEBHOOK_CAPTURE=true` (off by default), every request is saved to `data/webhook_samples/`, with auth headers and member emails/IPs redacted. This is useful for checking what IPS actually sends.
 
 > **Delivery runs through IPS's background tasks.** Webhooks are queued and sent by the IPS **cron** task, not when the content is posted. As a result:
-> - The **cron container** must be on the `flyviking` network, or it can't resolve `flyviking-discord-bot` and deliveries fail with nothing logged on the bot's side.
+> - The **cron container** must be on the `flyviking` network, or it can't resolve `flyviking-bot` and deliveries fail with nothing logged on the bot's side.
 > - Discord posts arrive up to one cron interval after publishing.
 >
 > To troubleshoot, each request the bot receives is logged as `Webhook HTTP <method> <path> from <ip> -> <status>`, with the secret masked. To find out which container sent a request, compare its IP with `docker network inspect flyviking`.
@@ -126,7 +126,7 @@ The flight log feed starts from the newest existing flight and doesn't post the 
 
 **FSAirlines API key caution:** a *site* API key locks to the first IP that uses it 100 times. Only call the FSAirlines API from the server. To capture real responses, e.g. for test fixtures, run this on the server:
 ```sh
-docker compose exec discord-bot python -m flyvikingbot.tools.fsa_sample [pilot_id]
+docker compose exec bot python -m flyvikingbot.tools.fsa_sample [pilot_id]
 ```
 It makes about 5 calls and writes them, with personal data redacted, to `data/fsa_samples/`.
 

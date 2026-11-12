@@ -1,6 +1,6 @@
 """Capture real FSAirlines API responses for test fixtures. Run ON THE SERVER only:
 
-    docker compose exec discord-bot python -m flyvikingbot.tools.fsa_sample [pilot_id]
+    docker compose exec bot python -m flyvikingbot.tools.fsa_sample [pilot_id]
 
 Makes about 5 API calls and writes data/fsa_samples/<function>.json. Pilot names and
 usernames are replaced with placeholders; callsigns and IDs are kept. (A site API key

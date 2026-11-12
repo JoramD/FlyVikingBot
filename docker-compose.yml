@@ -1,8 +1,8 @@
 services:
-  discord-bot:
+  bot:
     build: .
-    image: joramd/flyviking-discord-bot
-    container_name: flyviking-discord-bot
+    image: joramd/flyviking-bot
+    container_name: flyviking-bot
     restart: always
     env_file: .env
     volumes:
@@ -12,7 +12,7 @@ services:
 
 networks:
   # Shared with the website's cron container (it sends the IPS webhooks) so IPS can POST to
-  # http://flyviking-discord-bot:8080/ips/<secret>/<event> without public exposure.
+  # http://flyviking-bot:8080/ips/<secret>/<event> without public exposure.
   # Create once with: docker network create flyviking
   flyviking:
     name: ${DOCKER_NETWORK:-flyviking}

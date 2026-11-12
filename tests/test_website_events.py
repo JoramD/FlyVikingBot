@@ -111,7 +111,7 @@ async def test_images_only_downloaded_from_the_website(tmp_path):
     """A webhook can name any URL; fetching it would let a leaked secret probe internal addresses (SSRF)."""
     cog, _ = make_cog(tmp_path)
     cog.bot.http_session = AsyncMock()
-    for url in ("http://flyviking-discord-bot:8080/health", "http://169.254.169.254/latest", "file:///etc/passwd",
+    for url in ("http://flyviking-bot:8080/health", "http://169.254.169.254/latest", "file:///etc/passwd",
                 "https://evil.example/x.png"):
         assert await cog._fetch_image(url) is None
     cog.bot.http_session.get.assert_not_called()
