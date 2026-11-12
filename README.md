@@ -45,7 +45,7 @@ python -c "import secrets;print(secrets.token_urlsafe(32))"
 docker compose up -d --build
 ```
 - Logs, and captured webhook payloads, end up in `./data/`.
-- The container joins the external Docker network named by `DOCKER_NETWORK` (default `flyviking`, create it once with `docker network create flyviking`). Connect the website's PHP **and cron** containers to the same network so IPS can reach the bot at `http://flyviking-discord-bot:8080`; nothing is exposed publicly.
+- The container joins the external Docker network named by `DOCKER_NETWORK` (default `flyviking`, create it once with `docker network create flyviking`). Connect the website's **cron** container to the same network (IPS sends webhooks from its cron task) so IPS can reach the bot at `http://flyviking-discord-bot:8080`; nothing is exposed publicly.
 
 ### Locally
 ```sh
@@ -71,7 +71,7 @@ Set `GUILD_ID` to make slash commands sync instantly to that server. Run the tes
 4. With `WEBHOOK_CAPTURE=true` (off by default), every request is saved to `data/webhook_samples/`, with auth headers and member emails/IPs redacted. This is useful for checking what IPS actually sends.
 
 > **Delivery runs through IPS's background tasks.** Webhooks are queued and sent by the IPS **cron** task, not when the content is posted. As a result:
-> - The **cron container** (and the PHP container) must be on the `flyviking` network, or they can't resolve `flyviking-discord-bot` and deliveries fail silently on the bot's side.
+> - The **cron container** must be on the `flyviking` network, or it can't resolve `flyviking-discord-bot` and deliveries fail with nothing logged on the bot's side.
 > - Discord posts arrive up to one cron interval after publishing.
 >
 > To troubleshoot, each request the bot receives is logged as `Webhook HTTP <method> <path> from <ip> -> <status>`, with the secret masked. To find out which container sent a request, compare its IP with `docker network inspect flyviking`.

@@ -11,7 +11,7 @@ services:
       - flyviking
 
 networks:
-  # Shared with the website's PHP and cron containers so IPS can POST to
+  # Shared with the website's cron container (it sends the IPS webhooks) so IPS can POST to
   # http://flyviking-discord-bot:8080/ips/<secret>/<event> without public exposure.
   # Create once with: docker network create flyviking
   flyviking:
