@@ -28,13 +28,6 @@ def _compact(text: str | None) -> str:
     return re.sub(r"[^0-9a-z]", "", normalize(text))
 
 
-def clean_discord_name(value: str | None) -> str:
-    """'@JoramD#1234 ' -> 'joramd' (handles a leading @ and the legacy discriminator)."""
-    name = (value or "").strip().lstrip("@").strip()
-    name = re.sub(r"#\d{1,4}$", "", name)
-    return name.casefold()
-
-
 def names_match(pilot: Pilot, website_name: str | None) -> bool:
     """Loose match between an FSA pilot and a website display name.
 
@@ -90,7 +83,7 @@ def _unchanged(profile: MemberProfile, current: Link | None) -> bool:
     return (
         current is not None
         and current.external_id == (profile.fsa_pilot_id or "").strip()
-        and clean_discord_name(current.discord_name) == clean_discord_name(profile.discord_name)
+        and (current.discord_name or "").strip().casefold() == (profile.discord_name or "").strip().casefold()
     )
 
 

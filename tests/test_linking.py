@@ -43,7 +43,7 @@ def test_incomplete_fields(fields):
 
 
 def test_unchanged_is_noop_and_skips_lookup():
-    current = link(discord_name="@JoramD")
+    current = link(discord_name="JoramD")
     p = profile(discord_name="joramd ")
     assert not lk.needs_lookup(p, current)
     assert decide(profile=p, current=current, pilot=None, discord_matches=[]).action is lk.Action.NOOP
@@ -96,9 +96,6 @@ def test_names_do_not_match(website_name):
     assert not lk.names_match(pilot(), website_name)
 
 
-@pytest.mark.parametrize(("raw", "clean"), [("@JoramD", "joramd"), (" joramd#1234 ", "joramd"), ("", "")])
-def test_clean_discord_name(raw, clean):
-    assert lk.clean_discord_name(raw) == clean
 
 
 def test_map_ranks_to_roles():

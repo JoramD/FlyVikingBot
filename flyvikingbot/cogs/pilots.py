@@ -158,13 +158,13 @@ class Pilots(commands.Cog):
     # --- linking ------------------------------------------------------------------------------------------------------
 
     def find_discord_members(self, guild: discord.Guild, entered: str) -> list[int]:
-        username = lk.clean_discord_name(entered)
+        username = (entered or "").strip().casefold()  # Discord usernames are lowercase; members may type capitals
         if not username:
             return []
         exact = [m.id for m in guild.members if m.name.casefold() == username]
         if exact:
             return exact
-        wanted = lk.normalize(entered.strip().lstrip("@"))
+        wanted = lk.normalize(entered)
         return [
             m.id
             for m in guild.members
@@ -208,7 +208,7 @@ class Pilots(commands.Cog):
             return None, None
         self._lookups[user.id] = now
 
-        wanted = {lk.clean_discord_name(user.name)}
+        wanted = user.name.casefold()
         try:
             members = await self.bot.website.list_members()
         except ServiceError as exc:
@@ -226,7 +226,7 @@ class Pilots(commands.Cog):
             profile = ev.parse_member_profile(
                 data, self.settings.ips_field_fsa_pilot_id, self.settings.ips_field_discord_name
             )
-            if profile is None or lk.clean_discord_name(profile.discord_name) not in wanted:
+            if profile is None or (profile.discord_name or "").strip().casefold() != wanted:
                 continue
             decision = await self.process_profile(profile)
             if decision.action is lk.Action.REVIEW:
@@ -313,9 +313,8 @@ class Pilots(commands.Cog):
             )
         elif decision.action is lk.Action.REVIEW:
             # Post each distinct problem once, not on every unrelated profile save
-            marker = REVIEW_SENT_KEY.format(
-                profile.member_id, f"{(entered or '').strip().casefold()}|{lk.clean_discord_name(profile.discord_name)}"
-            )
+            entered_values = f"{(entered or '').strip()}|{(profile.discord_name or '').strip()}".casefold()
+            marker = REVIEW_SENT_KEY.format(profile.member_id, entered_values)
             if await storage.kv_get(marker) is None:
                 await self.clear_review_markers(profile.member_id)
                 await storage.kv_set(marker, "1")

@@ -156,7 +156,7 @@ async def test_find_discord_members_fallbacks(env):
     nick = make_member(3, "zz_user")
     nick.nick = "Viking Pilot"
     guild = SimpleNamespace(members=[env.joram, nick])
-    assert env.cog.find_discord_members(guild, "@JoramD") == [1]
+    assert env.cog.find_discord_members(guild, "JoramD") == [1]
     assert env.cog.find_discord_members(guild, "viking pilot") == [3]
     assert env.cog.find_discord_members(guild, "") == []
 
