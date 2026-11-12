@@ -59,7 +59,9 @@ class Settings:
     fsa_poll_seconds: int
     fsa_rank_sync_minutes: int
     fsa_rank_roles: tuple[str, ...]  # the only Discord roles / website groups the bot may manage for FSA ranks
-    website_rank_sync: bool  # also mirror ranks to website secondary groups (needs member-edit API permission)
+    website_rank_sync: bool  # also mirror ranks to website groups (needs member-edit API permission)
+    website_member_group: str  # primary group for pilots on an automatic rank
+    website_protected_groups: tuple[str, ...]  # primary groups the bot never changes
 
     data_dir: Path
 
@@ -133,6 +135,11 @@ def load_settings(
         fsa_poll_seconds=max(60, int(get("FSA_POLL_SECONDS", "120"))),
         fsa_rank_sync_minutes=max(5, int(get("FSA_RANK_SYNC_MINUTES", "60"))),
         website_rank_sync=_bool(get("WEBSITE_RANK_SYNC", "false")),
+        website_member_group=get("WEBSITE_MEMBER_GROUP", "Members"),
+        website_protected_groups=tuple(
+            n.strip() for n in get("WEBSITE_PROTECTED_GROUPS", "Administrators,Moderators").split(",")
+            if n.strip()
+        ),
         fsa_rank_roles=tuple(
             name.strip() for name in get("FSA_RANK_ROLES", DEFAULT_RANK_ROLES).split(",") if name.strip()
         ),

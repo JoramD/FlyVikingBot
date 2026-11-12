@@ -69,9 +69,18 @@ class WebsiteClient:
     async def get_member(self, member_id: int) -> dict[str, Any]:
         return await self._get(f"/core/members/{member_id}")
 
-    async def set_secondary_groups(self, member_id: int, group_ids: list[int]) -> dict[str, Any]:
-        """Replace a member's secondary groups. Nothing else about the member is changed."""
-        form = [("secondaryGroups[]", str(g)) for g in group_ids] or [("secondaryGroups", "")]
+    async def update_member_groups(
+        self, member_id: int, *, primary: int | None = None, secondary: list[int] | None = None
+    ) -> dict[str, Any]:
+        """Set a member's primary group and/or replace their secondary groups (None = leave unchanged).
+        Nothing else about the member is changed."""
+        form: list[tuple[str, str]] = []
+        if primary is not None:
+            form.append(("group", str(primary)))
+        if secondary is not None:
+            form += [("secondaryGroups[]", str(g)) for g in secondary] or [("secondaryGroups", "")]
+        if not form:
+            return {}
         return await self._request("POST", f"/core/members/{member_id}", {}, data=form)
 
 

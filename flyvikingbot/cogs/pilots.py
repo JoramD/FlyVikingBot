@@ -367,18 +367,38 @@ class Pilots(commands.Cog):
     async def set_website_groups(
         self, ips_member_id: int, rank_id: int | None, *, clear: bool = False, label: str = ""
     ) -> str | None:
-        """Mirror the FSA rank to the member's website secondary groups. The primary group is never changed."""
+        """Mirror the FSA rank to the member's website groups.
+
+        - Secondary groups: exactly one allowlisted rank group (none for Board ranks or on unlink).
+        - Primary group: set to Members for pilots on an automatic rank, unless it's a protected group
+          (WEBSITE_PROTECTED_GROUPS: Administrators, Moderators). The old primary group (e.g. Painter/Modder)
+          is kept as a secondary group. Board ranks, unlinks and unlinked members never change the primary.
+        """
         if not self.settings.website_rank_sync or (rank_id is None and not clear):
             return None
         try:
             mapping, managed = await self.website_group_map()
             primary, secondary = member_group_ids(await self.bot.website.get_member(ips_member_id))
             target = None if clear else mapping.get(rank_id)
-            if target is not None and target == primary:
-                target = None  # already their primary group; just drop other rank groups
-            to_add, to_remove = lk.role_changes(secondary, managed, target)
-            if to_add or to_remove:
-                await self.bot.website.set_secondary_groups(ips_member_id, sorted((secondary - to_remove) | to_add))
+
+            new_primary, kept = primary, set()
+            if target is not None:
+                members_id, protected, not_kept = await self.website_primary_rules()
+                if members_id is not None and primary not in protected and primary != members_id:
+                    new_primary = members_id
+                    # Keep the old primary (e.g. Painter/Modder) as a secondary group so no permissions are lost
+                    if primary is not None and primary not in managed and primary not in not_kept:
+                        kept = {primary}
+            secondary_target = None if target == new_primary else target  # no duplicate of the primary
+            to_add, to_remove = lk.role_changes(secondary | kept, managed, secondary_target)
+            to_add |= kept - secondary
+            new_secondary = ((secondary | kept) - to_remove) | to_add
+            if new_secondary != secondary or new_primary != primary:
+                await self.bot.website.update_member_groups(
+                    ips_member_id,
+                    primary=new_primary if new_primary != primary else None,
+                    secondary=sorted(new_secondary) if new_secondary != secondary else None,
+                )
         except ServiceError as exc:
             await self.report_once(
                 "website-groups",
@@ -387,14 +407,33 @@ class Pilots(commands.Cog):
             )
             return None
         await self.resolved("website-groups")
-        if not to_add and not to_remove:
+        if not to_add and not to_remove and new_primary == primary:
             return None
         names = dict(self._groups[1]) if self._groups else {}
 
         def names_of(ids: set[int]) -> str:
             return ", ".join(names.get(i, str(i)) for i in sorted(ids)) or "none"
 
-        return f"{label} (website): {names_of(to_remove)} → {names_of(to_add)}"
+        parts = []
+        if to_add or to_remove:
+            parts.append(f"{names_of(to_remove)} → {names_of(to_add)}")
+        if new_primary != primary:
+            parts.append(f"primary group {names_of({primary} if primary else set())} → {names_of({new_primary})}")
+        return f"{label} (website): " + "; ".join(parts)
+
+    async def website_primary_rules(self) -> tuple[int | None, set[int], set[int]]:
+        """(ID of the Members group, IDs of protected primary groups, IDs never kept as secondary), by name."""
+        by_name = {lk.normalize(name): gid for gid, name in (self._groups[1] if self._groups else [])}
+        members_id = by_name.get(lk.normalize(self.settings.website_member_group))
+        if members_id is None:
+            await self.report_once(
+                "member-group-missing",
+                f"⚠️ Website group '{self.settings.website_member_group}' (WEBSITE_MEMBER_GROUP) doesn't exist, "
+                "so pilots' primary groups aren't being set.",
+            )
+        protected = {gid for name in self.settings.website_protected_groups if (gid := by_name.get(lk.normalize(name)))}
+        not_kept = {gid for name in ("Guests",) if (gid := by_name.get(lk.normalize(name)))}
+        return members_id, protected, not_kept
 
     async def set_rank_role(
         self, member: discord.Member, rank_id: int | None, *, clear: bool = False, profile_url: str | None = None
