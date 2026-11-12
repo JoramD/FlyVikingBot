@@ -30,6 +30,18 @@ _EVENT_HEADER_HINTS = ("event",)
 _EVENT_BODY_KEYS = ("event", "eventKey", "event_key", "webhook", "type")
 
 
+# Member personal data IPS includes in author objects; never written to captures
+_REDACTED_BODY_KEYS = {"email", "registrationipaddress", "ipaddress", "ip_address", "birthday"}
+
+
+def redact(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {k: ("<redacted>" if k.lower() in _REDACTED_BODY_KEYS else redact(v)) for k, v in value.items()}
+    if isinstance(value, list):
+        return [redact(v) for v in value]
+    return value
+
+
 def detect_event(headers: dict[str, str], body: Any) -> str | None:
     for name, value in headers.items():
         lname = name.lower()
@@ -145,7 +157,7 @@ class WebhookServer:
             record = {
                 "event": event,
                 "headers": safe_headers,
-                "body": body if body is not None else raw.decode("utf-8", "replace"),
+                "body": redact(body) if body is not None else "<undecodable body omitted>",
             }
             name = f"{int(time.time() * 1000)}-{event or 'unknown'}.json"
             name = "".join(c if c.isalnum() or c in "-_." else "_" for c in name)

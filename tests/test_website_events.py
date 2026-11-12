@@ -35,6 +35,16 @@ async def test_blog_entry_announces_with_everyone(tmp_path):
     assert call.kwargs["allowed_mentions"].everyone is True
 
 
+async def test_real_ips_blog_entry_payload(tmp_path):
+    cog, ch = make_cog(tmp_path, ANNOUNCEMENT_BLOG_ID="1")
+    await cog.handle(ev.BLOG_ENTRY_CREATE, load_fixture("blogEntry_create_real"))
+    call = ch[100].send.await_args
+    assert call.args[0] == "@everyone"
+    assert call.kwargs["embed"].title == "Test5"
+    assert call.kwargs["embed"].url == "https://flyviking.net/blogs/entry/17-test5/"
+    assert call.kwargs["embed"].thumbnail.url is None
+
+
 async def test_blog_entry_without_image_still_posts(tmp_path):
     cog, ch = make_cog(tmp_path)
     payload = load_fixture("blogEntry_create")

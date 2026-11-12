@@ -86,6 +86,15 @@ async def test_unmatched_requests_are_logged_with_secret_masked(receiver, caplog
     assert SECRET not in caplog.text
 
 
+async def test_capture_redacts_member_personal_data(receiver):
+    client, received, tmp_path = receiver
+    body = {"title": "x", "author": {"name": "A", "email": "a@b.c", "registrationIpAddress": "1.2.3.4"}}
+    await client.post(f"/ips/{SECRET}/blogEntry_create", json=body)
+    saved = json.loads(next(tmp_path.glob("*.json")).read_text())["body"]
+    assert saved["author"] == {"name": "A", "email": "<redacted>", "registrationIpAddress": "<redacted>"}
+    assert received[0][1]["author"]["email"] == "a@b.c"  # handlers still get the original
+
+
 def test_short_secret_rejected():
     with pytest.raises(ValueError):
         WebhookServer("short", lambda e, p: None)
