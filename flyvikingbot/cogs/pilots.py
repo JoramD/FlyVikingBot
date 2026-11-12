@@ -146,7 +146,8 @@ class Pilots(commands.Cog):
     async def report_once(self, key: str, message: str) -> None:
         storage_key = REPORTED_KEY.format(key)
         if await self.bot.storage.kv_get(storage_key) is None:
-            await self.bot.post_system_message(message)
+            # Everything reported via report_once is a problem staff must act on
+            await self.bot.post_system_message(message, action_required=True)
             await self.bot.storage.kv_set(storage_key, "1")
 
     async def resolved(self, key: str) -> None:
@@ -287,13 +288,15 @@ class Pilots(commands.Cog):
             await self.apply_link(profile, decision.discord_id, source="auto", pilot=inp.pilot)
             await self.bot.post_system_message(
                 f"✅ Linked <@{decision.discord_id}> to FSAirlines pilot `{inp.pilot.id}` ({inp.pilot.full_name}) "
-                f"· {_profile_link(profile.profile_url)}"
+                f"· {_profile_link(profile.profile_url)}",
+                action_required=False,
             )
         elif decision.action is lk.Action.UNLINK:
             await self.apply_unlink(current)
             await self.bot.post_system_message(
                 f"Unlinked <@{current.discord_id}> from FSAirlines (profile fields cleared) "
-                f"· {_profile_link(profile.profile_url)}"
+                f"· {_profile_link(profile.profile_url)}",
+                action_required=False,
             )
         elif decision.action is lk.Action.REVIEW:
             # Post each distinct problem once, not on every unrelated profile save
@@ -322,7 +325,10 @@ class Pilots(commands.Cog):
             f"{reasons}"
         )
         if not decision.approvable:
-            await self.bot.post_system_message(header + "\nThe member needs to correct their profile fields.")
+            # Staff need to tell the member: the bot can't reach them about this
+            await self.bot.post_system_message(
+                header + "\nThe member needs to correct their profile fields.", action_required=True
+            )
             return
         review = {
             "discord_id": decision.discord_id,
@@ -333,7 +339,9 @@ class Pilots(commands.Cog):
         }
         await self.bot.storage.kv_set(REVIEW_KEY.format(profile.member_id), json.dumps(review))
         await self.bot.post_system_message(
-            header + f"\nApprove to link <@{decision.discord_id}> anyway.", view=review_view(profile.member_id)
+            header + f"\nApprove to link <@{decision.discord_id}> anyway.",
+            action_required=True,
+            view=review_view(profile.member_id),
         )
 
     async def handle_review(self, interaction: discord.Interaction, action: str, ips_member_id: int) -> None:

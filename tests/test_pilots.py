@@ -313,3 +313,14 @@ async def test_ensure_link_rule(env):
     await env.cog.ensure_link(stranger)
     await env.cog.ensure_link(stranger)  # within the cooldown -> one lookup only
     env.bot.website.list_members.assert_awaited_once()
+
+
+async def test_system_message_action_flags(env):
+    await env.cog.process_profile(profile(name="Joram Davids"))  # auto-link: informational
+    assert env.bot.post_system_message.await_args.kwargs["action_required"] is False
+    await env.cog.process_profile(profile(name="Joram Davids", fsa_id=None, discord=None))  # unlink: informational
+    assert env.bot.post_system_message.await_args.kwargs["action_required"] is False
+    await env.cog.process_profile(profile(name="Captain Viking"))  # review: staff must act
+    assert env.bot.post_system_message.await_args.kwargs["action_required"] is True
+    await env.cog.report_once("x", "problem")  # every reported problem needs action
+    assert env.bot.post_system_message.await_args.kwargs["action_required"] is True

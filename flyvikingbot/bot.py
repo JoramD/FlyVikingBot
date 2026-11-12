@@ -76,15 +76,29 @@ class FlyVikingBot(commands.Bot):
             return self.get_guild(self.settings.guild_id)
         return self.guilds[0] if len(self.guilds) == 1 else None
 
-    async def post_system_message(self, content: str, **kwargs: Any) -> discord.Message | None:
-        """Post to #system-messages (staff). Logs instead if the channel isn't configured."""
+    async def post_system_message(
+        self, content: str, *, action_required: bool, **kwargs: Any
+    ) -> discord.Message | None:
+        """Post to #system-messages (staff). Logs instead if the channel isn't configured.
+
+        RULE: every post must say whether staff need to act. Posts that need action ping the
+        staff role (SYSTEM_MESSAGES_ROLE_ID, @Board of Directors); purely informational posts
+        don't. The argument is deliberately required so new features can't skip the decision.
+        Only that role can be pinged; user mentions in the text never notify anyone.
+        """
         channel_id = self.settings.channel_system_messages
         if not channel_id:
             log.warning("System message (CHANNEL_SYSTEM_MESSAGES not set): %s", content)
             return None
+        role_id = self.settings.system_messages_role_id
+        if action_required and role_id:
+            content = f"<@&{role_id}> {content}"
+            mentions = discord.AllowedMentions(everyone=False, users=False, roles=[discord.Object(id=role_id)])
+        else:
+            mentions = discord.AllowedMentions.none()
         try:
             channel = self.get_channel(channel_id) or await self.fetch_channel(channel_id)
-            return await channel.send(content, allowed_mentions=discord.AllowedMentions.none(), **kwargs)
+            return await channel.send(content, allowed_mentions=mentions, **kwargs)
         except discord.HTTPException:
             log.exception("Failed to post system message: %s", content)
             return None
