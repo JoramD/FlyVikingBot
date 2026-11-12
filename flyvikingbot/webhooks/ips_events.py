@@ -60,7 +60,7 @@ def unwrap(payload: Any) -> dict[str, Any]:
         payload = payload[0]
     if not isinstance(payload, dict):
         return {}
-    for key in ("data", "item", "content", "payload"):
+    for key in ("member", "data", "item", "content", "payload"):  # member_edited: {"member": ..., "changes": ...}
         inner = payload.get(key)
         if "url" not in payload and isinstance(inner, dict):
             return inner

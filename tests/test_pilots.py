@@ -324,3 +324,10 @@ async def test_system_message_action_flags(env):
     assert env.bot.post_system_message.await_args.kwargs["action_required"] is True
     await env.cog.report_once("x", "problem")  # every reported problem needs action
     assert env.bot.post_system_message.await_args.kwargs["action_required"] is True
+
+
+def test_parse_member_edited_envelope():
+    # Real IPS 5 member_edited body: {"member": {...}, "changes": {...}}
+    body = {"member": member_payload(), "changes": {"customFields": {"7": "100"}}}
+    p = parse_member_profile(body, FSA_FIELD, DISCORD_FIELD)
+    assert p.member_id == 1 and p.fsa_pilot_id == "100" and p.discord_name == "joramd"
