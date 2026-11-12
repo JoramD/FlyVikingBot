@@ -64,6 +64,10 @@ class FlyVikingBot(commands.Bot):
             guild = discord.Object(id=self.settings.guild_id)
             self.tree.copy_global_to(guild=guild)
             synced = await self.tree.sync(guild=guild)
+            # Remove global registrations (from earlier deploys without GUILD_ID, or the old bot);
+            # otherwise Discord shows every command twice
+            self.tree.clear_commands(guild=None)
+            await self.tree.sync()
         else:
             synced = await self.tree.sync()
         log.info("Synced %d application commands", len(synced))
