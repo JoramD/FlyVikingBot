@@ -331,30 +331,56 @@ class Pilots(commands.Cog):
 
         target = None if clear else mapping.get(rank_id)
         to_add, to_remove = lk.role_changes((r.id for r in member.roles), rank_role_ids, target)
-
-        if not to_add and not to_remove:
-            return None
         guild = member.guild
-        try:
-            if to_remove:
-                await member.remove_roles(*(guild.get_role(r) for r in to_remove if guild.get_role(r)),
-                                          reason="FSAirlines rank sync")
-            if to_add:
-                await member.add_roles(*(guild.get_role(r) for r in to_add if guild.get_role(r)),
-                                       reason="FSAirlines rank sync")
-        except discord.Forbidden:
-            await self.report_once(
-                f"rank-forbidden:{member.id}",
-                f"⚠️ Can't update rank roles for {member.mention}: missing permission, or the bot's role is below "
-                f"the rank roles. Move the bot's role above them. · {_profile_link(profile_url)}",
-            )
-            return None
-        await self.resolved(f"rank-forbidden:{member.id}")
 
         def names_of(ids: set[int]) -> str:
             return ", ".join(r.name for i in ids if (r := guild.get_role(i))) or "none"
 
+        if to_add or to_remove:
+            try:
+                if to_remove:
+                    await member.remove_roles(*(guild.get_role(r) for r in to_remove if guild.get_role(r)),
+                                              reason="FSAirlines rank sync")
+                if to_add:
+                    await member.add_roles(*(guild.get_role(r) for r in to_add if guild.get_role(r)),
+                                           reason="FSAirlines rank sync")
+            except discord.Forbidden:
+                await self.report_once(
+                    f"rank-forbidden:{member.id}",
+                    f"⚠️ Can't update rank roles for {member.mention}: missing permission, or the bot's role is "
+                    f"below the rank roles. Move the bot's role above them. · {_profile_link(profile_url)}",
+                )
+                return None
+            await self.resolved(f"rank-forbidden:{member.id}")
+
+        if not clear and target is None:
+            await self.notify_board_rank(member, rank_id, names_of(to_remove) if to_remove else None, profile_url)
+        else:
+            await self.clear_board_notices(member.id)
+
+        if not to_add and not to_remove:
+            return None
         return f"{member.mention}: {names_of(to_remove)} → {names_of(to_add)}"
+
+    async def notify_board_rank(
+        self, member: discord.Member, rank_id: int, removed: str | None, profile_url: str | None
+    ) -> None:
+        """Tell staff (once per member and rank) that a pilot is on a Board of Directors rank."""
+        try:
+            rank_name = next((r.name for r in await self.bot.fsa.ranks() if r.id == rank_id), f"rank {rank_id}")
+        except ServiceError:
+            rank_name = f"rank {rank_id}"
+        removed_text = f" Removed pilot rank role(s): {removed}." if removed else ""
+        await self.report_once(
+            f"board:{member.id}:{rank_id}",
+            f"🎖️ {member.mention} is now **{rank_name}** in FSAirlines (Board of Directors).{removed_text} "
+            f"Assign their Board of Directors role manually. · {_profile_link(profile_url)}",
+        )
+
+    async def clear_board_notices(self, discord_id: int) -> None:
+        """Forget earlier Board notices so a later promotion is announced again."""
+        for key in await self.bot.storage.kv_keys(REPORTED_KEY.format(f"board:{discord_id}:")):
+            await self.bot.storage.kv_delete(key)
 
     async def sync_all(self) -> tuple[list[str], int]:
         """Sync every linked member. Returns (changes, unchanged count)."""

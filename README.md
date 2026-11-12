@@ -14,7 +14,7 @@ Discord bot for the FlyViking virtual airline, connecting [flyviking.net](https:
 **FSAirlines → Discord**
 - **Flight logs:** every flight completed in FSAirlines is posted to #flight-logs within about 2 minutes. It shows route, aircraft, block time, distance, landing rate and rating, and an @mention if the pilot is linked.
 - **Account linking:** members fill in *FSAirlines Pilot ID* and *Discord username* on their flyviking.net profile, and the bot links them automatically. Anything it can't verify, such as an unknown user, a name mismatch or an account that's already linked, goes to #system-messages with the member's profile link and Approve/Reject buttons.
-- **Rank roles:** linked members get the Discord role named after their FSAirlines rank (or its short name). It syncs hourly and right after linking. Only the roles listed in `FSA_RANK_ROLES` are ever assigned or removed. A pilot on any other rank, such as Board of Directors, loses those rank roles and gets nothing automatically; staff assign Board roles by hand.
+- **Rank roles:** linked members get the Discord role named after their FSAirlines rank (or its short name). It syncs hourly and right after linking. Only the roles listed in `FSA_RANK_ROLES` are ever assigned or removed. A pilot on any other rank, such as Board of Directors, loses those rank roles and gets nothing automatically. #system-messages is told once, with their profile link, so staff can assign the Board role by hand.
 
 **Website → Discord** (via Invision Community webhooks)
 | IPS event | Discord |

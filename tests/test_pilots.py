@@ -178,7 +178,25 @@ async def test_board_rank_removes_pilot_roles_but_never_assigns_board_role(env):
     assert {r.id for r in member.remove_roles.await_args.args} == {15, 16}  # only allowlisted rank roles
     member.add_roles.assert_not_awaited()  # Board role is never given out
     assert change.startswith("<@1>: ") and change.endswith(" → none")
+
+
+async def test_board_promotion_notifies_staff_once_and_again_after_demotion(env):
+    cog = pc.Pilots(env.bot)
+    env.fsa.ranks = AsyncMock(return_value=[Rank(2, "Captain", None), Rank(9, "Chief Executive", "CEO")])
+    member = fake_guild_member(RANK_ROLES, have=[15, 50])
+    await cog.set_rank_role(member, 9, profile_url="https://flyviking.net/profile/1-joramd/")
+    msg = env.bot.post_system_message.await_args.args[0]
+    assert "<@1> is now **Chief Executive**" in msg and "Board of Directors" in msg
+    assert "Removed pilot rank role(s): Captain" in msg and "https://flyviking.net/profile/1-joramd/" in msg
+
+    env.bot.post_system_message.reset_mock()
+    member.roles = []  # the Captain role was removed
+    await cog.set_rank_role(member, 9)  # hourly sync: no repeat
     env.bot.post_system_message.assert_not_awaited()
+
+    await cog.set_rank_role(member, 2)  # back to Captain clears the notice...
+    await cog.set_rank_role(member, 9)  # ...so a new promotion is announced again
+    assert "Chief Executive" in env.bot.post_system_message.await_args.args[0]
 
 
 async def test_unknown_rank_keeps_roles(env):
