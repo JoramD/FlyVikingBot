@@ -101,12 +101,16 @@ def decide(inp: LinkInput) -> Decision:
     if _unchanged(p, inp.current):
         return Decision(Action.NOOP)
 
+    # Report every problem with the entered values in one go, not one per profile save
+    blocking = []
     if inp.pilot is None:
-        return Decision(Action.REVIEW, (f"FSAirlines pilot ID `{p.fsa_pilot_id}` doesn't exist.",))
+        blocking.append(f"FSAirlines pilot `{p.fsa_pilot_id}` doesn't exist.")
     if not inp.discord_matches:
-        return Decision(Action.REVIEW, (f"No server member found with Discord username `{p.discord_name}`.",))
-    if len(inp.discord_matches) > 1:
-        return Decision(Action.REVIEW, (f"Discord name `{p.discord_name}` matches several server members.",))
+        blocking.append(f"No server member found with Discord username `{p.discord_name}`.")
+    elif len(inp.discord_matches) > 1:
+        blocking.append(f"Discord name `{p.discord_name}` matches several server members.")
+    if blocking:
+        return Decision(Action.REVIEW, tuple(blocking))
 
     discord_id = inp.discord_matches[0]
     reasons = []

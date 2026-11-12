@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import json
 import logging
@@ -127,6 +128,7 @@ class Pilots(commands.Cog):
         self.settings = bot.settings
         self._groups: tuple[float, list[tuple[int, str]]] | None = None
         self._lookups: dict[int, float] = {}  # Discord user ID -> last on-demand website lookup
+        self._profile_locks: dict[int, asyncio.Lock] = {}  # website member ID -> serialises processing
 
     async def cog_load(self) -> None:
         self.bot.add_dynamic_items(ReviewButton)
@@ -250,6 +252,13 @@ class Pilots(commands.Cog):
         return pilot_id
 
     async def process_profile(self, profile: ev.MemberProfile) -> lk.Decision:
+        # IPS can deliver several member_edited events for one save; handle one member at a time so the
+        # "already posted" checks see each other's results (no duplicate staff posts or double links)
+        lock = self._profile_locks.setdefault(profile.member_id, asyncio.Lock())
+        async with lock:
+            return await self._process_profile(profile)
+
+    async def _process_profile(self, profile: ev.MemberProfile) -> lk.Decision:
         storage, guild = self.bot.storage, self.bot.primary_guild()
         current = await storage.link_by_ips_member(profile.member_id, lk.SERVICE_FSA)
         entered = profile.fsa_pilot_id

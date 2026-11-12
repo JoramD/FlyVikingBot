@@ -105,3 +105,9 @@ def test_role_changes():
     assert lk.role_changes([11, 99], [11, 12], 12) == ({12}, {11})
     assert lk.role_changes([12, 99], [11, 12], 12) == (set(), set())
     assert lk.role_changes([11, 99], [11, 12], None) == (set(), {11})  # unmapped rank: drop rank roles only
+
+
+def test_all_blocking_problems_reported_together():
+    d = decide(pilot=None, discord_matches=[])
+    assert d.action is lk.Action.REVIEW and not d.approvable and len(d.reasons) == 2
+    assert "doesn't exist" in d.reasons[0] and "No server member" in d.reasons[1]

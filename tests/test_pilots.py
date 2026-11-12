@@ -1,3 +1,4 @@
+import asyncio
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -331,3 +332,13 @@ def test_parse_member_edited_envelope():
     body = {"member": member_payload(), "changes": {"customFields": {"7": "100"}}}
     p = parse_member_profile(body, FSA_FIELD, DISCORD_FIELD)
     assert p.member_id == 1 and p.fsa_pilot_id == "100" and p.discord_name == "joramd"
+
+
+async def test_bad_data_in_both_fields_gives_one_post(env):
+    env.fsa.resolve_pilot_id = AsyncMock(return_value=None)
+    bad = profile(fsa_id="FVK999", discord="nobody")
+    # Two deliveries of the same save arriving at once
+    await asyncio.gather(env.cog.process_profile(bad), env.cog.process_profile(bad))
+    env.bot.post_system_message.assert_awaited_once()
+    msg = env.bot.post_system_message.await_args.args[0]
+    assert "`FVK999` doesn't exist" in msg and "`nobody`" in msg
