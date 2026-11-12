@@ -113,10 +113,10 @@ async def test_clear_on_unlink(env):
     env.website.update_member_groups.assert_awaited_once_with(1, primary=None, secondary=[30])
 
 
-async def test_disabled_by_default_and_unknown_rank_skipped(env):
+async def test_enabled_by_default_can_be_disabled_and_unknown_rank_skipped(env):
     assert await env.cog.set_website_groups(1, None) is None  # no rank from FSA: don't touch
-    env.cog.settings = load_settings(env={**BASE_ENV, "DATA_DIR": "x"})
-    assert env.cog.settings.website_rank_sync is False
+    assert load_settings(env={**BASE_ENV, "DATA_DIR": "x"}).website_rank_sync is True  # on by default
+    env.cog.settings = load_settings(env={**BASE_ENV, "DATA_DIR": "x", "WEBSITE_RANK_SYNC": "false"})
     assert await env.cog.set_website_groups(1, 2) is None
     env.website.get_member.assert_not_awaited()
 

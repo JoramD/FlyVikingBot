@@ -57,7 +57,8 @@ def make_member(mid, name, roles=()):
 async def env(tmp_path):
     settings = load_settings(
         env={**BASE_ENV, "DATA_DIR": str(tmp_path), "IPS_FIELD_FSA_PILOT_ID": str(FSA_FIELD),
-             "IPS_FIELD_DISCORD_NAME": str(DISCORD_FIELD), "CHANNEL_SYSTEM_MESSAGES": "900"},
+             "IPS_FIELD_DISCORD_NAME": str(DISCORD_FIELD), "CHANNEL_SYSTEM_MESSAGES": "900",
+             "WEBSITE_RANK_SYNC": "false"},  # website groups are covered in test_website_groups.py
     )
     storage = Storage(tmp_path / "db.sqlite")
     await storage.init()

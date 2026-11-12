@@ -108,7 +108,7 @@ def load_settings(
         ips_field_discord_name=optional_int("IPS_FIELD_DISCORD_NAME"),
         fsa_poll_seconds=max(60, int(get("FSA_POLL_SECONDS", "120"))),
         fsa_rank_sync_minutes=max(5, int(get("FSA_RANK_SYNC_MINUTES", "60"))),
-        website_rank_sync=_bool(get("WEBSITE_RANK_SYNC", "false")),
+        website_rank_sync=_bool(get("WEBSITE_RANK_SYNC", "true")),
         website_member_group=get("WEBSITE_MEMBER_GROUP", "Members"),
         website_protected_groups=tuple(
             n.strip() for n in get("WEBSITE_PROTECTED_GROUPS", "Administrators,Moderators").split(",")
