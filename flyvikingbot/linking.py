@@ -144,10 +144,11 @@ def map_ranks_to_roles(ranks: Iterable[Rank], roles: Iterable[RoleRef]) -> dict[
 def role_changes(member_role_ids: Iterable[int], rank_role_ids: Iterable[int], target: int | None):
     """Return (to_add, to_remove) so the member holds exactly the target rank role.
 
-    With no target (the rank has no matching role) nothing changes; that gap is
-    reported to staff instead of stripping roles over a possible setup mistake.
+    With no target (a rank without an automatic role, e.g. Board of Directors) all
+    managed rank roles are removed; roles outside the managed set are never touched.
     """
-    if target is None:
-        return set(), set()
     have = set(member_role_ids)
-    return {target} - have, (have & set(rank_role_ids)) - {target}
+    managed = have & set(rank_role_ids)
+    if target is None:
+        return set(), managed
+    return {target} - have, managed - {target}

@@ -291,11 +291,12 @@ class Pilots(commands.Cog):
 
     # --- rank roles ---------------------------------------------------------------------------------------------------
 
-    async def rank_role_map(self, guild: discord.Guild) -> tuple[dict[int, int | None], dict[int, str]]:
+    async def rank_role_map(self, guild: discord.Guild) -> tuple[dict[int, int | None], set[int]]:
         """Map FSA ranks to Discord roles, considering only the roles in FSA_RANK_ROLES.
 
-        Other roles (e.g. Board of Directors) are never assigned or removed by the bot,
-        even if an FSA rank happens to share their name.
+        Returns (rank_id -> role ID or None, IDs of all allowlisted roles). Other roles
+        (e.g. Board of Directors) are never assigned or removed by the bot, even if an
+        FSA rank happens to share their name.
         """
         ranks = await self.bot.fsa.ranks()
         allowed = {lk.normalize(name): name for name in self.settings.fsa_rank_roles}
@@ -310,29 +311,26 @@ class Pilots(commands.Cog):
                 f"rank-role-missing:{key}",
                 f"⚠️ Rank role '{allowed[key]}' is listed in FSA_RANK_ROLES but doesn't exist in Discord.",
             )
-        return lk.map_ranks_to_roles(ranks, roles), {r.id: r.name for r in ranks}
+        return lk.map_ranks_to_roles(ranks, roles), {r.id for r in roles}
 
     async def set_rank_role(
         self, member: discord.Member, rank_id: int | None, *, clear: bool = False, profile_url: str | None = None
     ) -> str | None:
-        """Give the member the role for rank_id (or remove all rank roles if clear). Returns a change summary."""
+        """Give the member the role for rank_id, or remove all rank roles if clear.
+
+        A rank without an automatic role (e.g. Board of Directors) removes the member's
+        allowlisted rank roles; staff assign Board roles manually. Returns a change summary.
+        """
+        if rank_id is None and not clear:
+            return None  # FSA gave no rank: don't strip roles on incomplete data
         try:
-            mapping, names = await self.rank_role_map(member.guild)
+            mapping, rank_role_ids = await self.rank_role_map(member.guild)
         except ServiceError as exc:
             log.warning("Can't load FSA ranks: %s", exc)
             return None
-        rank_role_ids = {rid for rid in mapping.values() if rid}
 
-        if clear:
-            target = None
-            to_add, to_remove = set(), set(r.id for r in member.roles) & rank_role_ids
-        else:
-            target = mapping.get(rank_id) if rank_id is not None else None
-            if target is None:
-                # Ranks without an automatic role (e.g. Board of Directors) are handled manually by staff
-                log.debug("FSA rank %s has no automatic role; leaving %s's roles alone", names.get(rank_id), member)
-                return None
-            to_add, to_remove = lk.role_changes((r.id for r in member.roles), rank_role_ids, target)
+        target = None if clear else mapping.get(rank_id)
+        to_add, to_remove = lk.role_changes((r.id for r in member.roles), rank_role_ids, target)
 
         if not to_add and not to_remove:
             return None

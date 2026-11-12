@@ -104,4 +104,4 @@ def test_map_ranks_to_roles():
 def test_role_changes():
     assert lk.role_changes([11, 99], [11, 12], 12) == ({12}, {11})
     assert lk.role_changes([12, 99], [11, 12], 12) == (set(), set())
-    assert lk.role_changes([11], [11, 12], None) == (set(), set())  # unmapped rank: leave roles alone
+    assert lk.role_changes([11, 99], [11, 12], None) == (set(), {11})  # unmapped rank: drop rank roles only

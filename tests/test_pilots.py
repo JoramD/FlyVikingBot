@@ -169,15 +169,23 @@ async def test_set_rank_role_swaps_roles(env):
     env.bot.post_system_message.assert_not_awaited()
 
 
-async def test_board_ranks_are_never_assigned_or_reported(env):
+async def test_board_rank_removes_pilot_roles_but_never_assigns_board_role(env):
     cog = pc.Pilots(env.bot)
     # An FSA rank that shares its name with a non-allowlisted Discord role
     env.fsa.ranks = AsyncMock(return_value=[Rank(2, "Captain", None), Rank(9, "Board of Directors", "BOD")])
-    member = fake_guild_member(RANK_ROLES, have=[15, 50])
-    assert await cog.set_rank_role(member, 9) is None
-    member.add_roles.assert_not_awaited()
-    member.remove_roles.assert_not_awaited()  # keeps their existing rank role; staff handle board roles
+    member = fake_guild_member(RANK_ROLES, have=[15, 16, 60, 50])  # Captain, Cargo Captain, Board, Members
+    change = await cog.set_rank_role(member, 9)
+    assert {r.id for r in member.remove_roles.await_args.args} == {15, 16}  # only allowlisted rank roles
+    member.add_roles.assert_not_awaited()  # Board role is never given out
+    assert change.startswith("<@1>: ") and change.endswith(" → none")
     env.bot.post_system_message.assert_not_awaited()
+
+
+async def test_unknown_rank_keeps_roles(env):
+    cog = pc.Pilots(env.bot)
+    member = fake_guild_member(RANK_ROLES, have=[15])
+    assert await cog.set_rank_role(member, None) is None
+    member.remove_roles.assert_not_awaited()
 
 
 async def test_missing_allowlisted_role_reported_once(env):
