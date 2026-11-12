@@ -1,0 +1,43 @@
+{
+  "status": "SUCCESS",
+  "data": [
+    {
+      "id": 4704049,
+      "ac_type": "MD11",
+      "ac_id": 225986,
+      "pic": "Kari Nordmann",
+      "pilot_id": 97465,
+      "number": "CHARTER",
+      "dep": "CYYZ",
+      "pln_arr": "EGLL",
+      "arr": "EGLL",
+      "deptime": 1240,
+      "arrtime": 2001,
+      "hours": 7.4,
+      "ts": 1794513869,
+      "rating": 100,
+      "ratingreasons": "",
+      "distance": 3085,
+      "pax": 0,
+      "crew": 552,
+      "salary": 100774,
+      "fuel_used": 60620,
+      "cargo_kg": 562,
+      "packages_kg": 91400,
+      "flighttype": 0,
+      "comment": "Flight from CYYZ to EGLL",
+      "vs": -272,
+      "simversion": "FS2024",
+      "flightstate": "On Block",
+      "cargo": 2260,
+      "packages": 617844,
+      "cheat": 0,
+      "interface": "SimConnect",
+      "os": "Win64",
+      "version": "v2.6.2",
+      "profit": 529064,
+      "loc_deptime": 740,
+      "loc_arrtime": 2001
+    }
+  ]
+}

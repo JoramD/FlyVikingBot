@@ -1,0 +1,53 @@
+{
+  "status": "SUCCESS",
+  "data": [
+    {
+      "id": 97396,
+      "name": "Ola",
+      "surname": "Hansen",
+      "user": "OlaH",
+      "va_user": "FVK001",
+      "rank_id": 185472,
+      "location": "ENGM",
+      "lastactive": 1794400309,
+      "status": null,
+      "budget": 4513381
+    },
+    {
+      "id": 97401,
+      "name": "Pieter",
+      "surname": "Jansen",
+      "user": "PieterJ",
+      "va_user": "FVK003",
+      "rank_id": 185619,
+      "location": "ENGM",
+      "lastactive": 1794400309,
+      "status": null,
+      "budget": 4513381
+    },
+    {
+      "id": 97465,
+      "name": "Kari",
+      "surname": "Nordmann",
+      "user": "Kari",
+      "va_user": "FVK004",
+      "rank_id": 193744,
+      "location": "ENGM",
+      "lastactive": 1794400309,
+      "status": null,
+      "budget": 4513381
+    },
+    {
+      "id": 123699,
+      "name": "Sam",
+      "surname": "Smith",
+      "user": "Sam55",
+      "va_user": "FVK005",
+      "rank_id": 185469,
+      "location": "ENGM",
+      "lastactive": 1794400309,
+      "status": null,
+      "budget": 4513381
+    }
+  ]
+}

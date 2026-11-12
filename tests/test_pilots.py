@@ -41,7 +41,7 @@ def test_parse_member_profile_real_shape():
 
 def fsa_pilot(pid="100", **kw):
     base = dict(user="joramd", name="Joram", surname="Davids", rank="Captain", rank_id=2, flights=1, hours=1.0,
-                rating=9.0, distance=1.0, location="BIKF", last_active=None)
+                rating_total=9.0, distance=1.0, location="BIKF", last_active=None)
     return Pilot(id=pid, **{**base, **kw})
 
 
@@ -216,3 +216,38 @@ async def test_missing_allowlisted_role_reported_once(env):
     env.bot.post_system_message.reset_mock()
     await cog.set_rank_role(member, 2)
     env.bot.post_system_message.assert_not_awaited()
+
+
+async def test_callsign_in_profile_field_resolves_and_is_cached(env):
+    env.fsa.resolve_pilot_id = AsyncMock(return_value="100")
+    d = await env.cog.process_profile(profile(name="Joram Davids", fsa_id="FVK003"))
+    assert d.action is lk.Action.LINK
+    assert (await env.storage.link_by_discord(1, "fsa")).external_id == "100"  # numeric ID stored, not FVK003
+    env.fsa.pilot.reset_mock()
+    again = await env.cog.process_profile(profile(name="Joram Davids", fsa_id="FVK003"))
+    assert again.action is lk.Action.NOOP
+    env.fsa.resolve_pilot_id.assert_awaited_once()  # cached after the first lookup
+    env.fsa.pilot.assert_not_awaited()
+
+
+async def test_unknown_callsign_reviewed(env):
+    env.fsa.resolve_pilot_id = AsyncMock(return_value=None)
+    d = await env.cog.process_profile(profile(fsa_id="FVK999"))
+    assert d.action is lk.Action.REVIEW and not d.approvable
+    assert "`FVK999`" in env.bot.post_system_message.await_args.args[0]
+    env.fsa.pilot.assert_not_awaited()
+
+
+async def test_review_posted_once_per_entered_values(env):
+    await env.cog.process_profile(profile(name="Captain Viking"))
+    await env.cog.process_profile(profile(name="Captain Viking"))  # unrelated profile save
+    assert env.bot.post_system_message.await_count == 1
+    await env.cog.process_profile(profile(name="Captain Viking", fsa_id="200"))  # changed values: new review
+    assert env.bot.post_system_message.await_count == 2
+
+
+async def test_approved_callsign_review_stores_numeric_id(env):
+    env.fsa.resolve_pilot_id = AsyncMock(return_value="100")
+    await env.cog.process_profile(profile(name="Captain Viking", fsa_id="FVK003"))
+    assert json.loads(await env.storage.kv_get("review:1"))["fsa_pilot_id"] == "100"
+    assert "`FVK003`" in env.bot.post_system_message.await_args.args[0]  # shows what the member typed

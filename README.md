@@ -8,12 +8,12 @@ Discord bot for the FlyViking virtual airline, connecting [flyviking.net](https:
 - `/airline_statistics`: airline-wide statistics from FSAirlines
 - `/paint_lookup <query>`: find an aircraft paint in the website's downloads
 - `/clear <amount>`: delete the last 1–50 messages (administrators only)
-- `/pilot [member] [pilot_id]`: FSAirlines pilot stats. Shows rank, hours, flights, average rating, distance, location, last active and last flight. With no option it shows your own linked pilot.
+- `/pilot [member] [pilot]`: FSAirlines pilot stats. Shows rank, hours, flights, average rating, distance, passengers, cargo, location, last active and last flight. With no option it shows your own linked pilot. `pilot` accepts a callsign (`FVK003`) or a pilot ID.
 - `/sync_rank [member]`: sync FSAirlines rank roles right away (staff with Manage Roles only)
 
 **FSAirlines → Discord**
 - **Flight logs:** every flight completed in FSAirlines is posted to #flight-logs within about 2 minutes. It shows route, aircraft, block time, distance, landing rate and rating, and an @mention if the pilot is linked.
-- **Account linking:** members fill in *FSAirlines Pilot ID* and *Discord username* on their flyviking.net profile, and the bot links them automatically. Anything it can't verify, such as an unknown user, a name mismatch or an account that's already linked, goes to #system-messages with the member's profile link and Approve/Reject buttons.
+- **Account linking:** members fill in *FSAirlines Pilot ID* (their callsign such as `FVK003`, or the numeric ID) and *Discord username* on their flyviking.net profile, and the bot links them automatically. Anything it can't verify, such as an unknown user, a name mismatch or an account that's already linked, goes to #system-messages with the member's profile link and Approve/Reject buttons.
 - **Rank roles:** linked members get the Discord role named after their FSAirlines rank (or its short name). It syncs hourly and right after linking. Only the roles listed in `FSA_RANK_ROLES` are ever assigned or removed. A pilot on any other rank, such as Board of Directors, loses those rank roles and gets nothing automatically. #system-messages is told once, with their profile link, so staff can assign the Board role by hand.
 - **Website rank groups** (optional, `WEBSITE_RANK_SYNC=true`): the same rank is mirrored to a website **secondary** member group with the same name. Only those allowlisted groups are touched. Pilots on one of those ranks also get **Members** as their primary group. Administrators and Moderators (`WEBSITE_PROTECTED_GROUPS`) are never changed, and an old primary such as Painter/Modder is kept as a secondary group. Members without a pilot rank, such as external painters, are never touched. This prepares for rank-restricted content later.
 

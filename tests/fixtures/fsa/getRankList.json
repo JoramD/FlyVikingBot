@@ -1,0 +1,70 @@
+{
+  "status": "SUCCESS",
+  "data": [
+    {
+      "id": 185469,
+      "name": "First Officer",
+      "short": "FO",
+      "settings": 0,
+      "pilots": 0,
+      "aircrafts": 0,
+      "fleet": 0,
+      "flights": 0,
+      "partnerships": 0,
+      "advertisements": 0,
+      "fleet_id": 0
+    },
+    {
+      "id": 185472,
+      "name": "Chief Executive Officer",
+      "short": "CEO",
+      "settings": 0,
+      "pilots": 0,
+      "aircrafts": 0,
+      "fleet": 0,
+      "flights": 0,
+      "partnerships": 0,
+      "advertisements": 0,
+      "fleet_id": 0
+    },
+    {
+      "id": 185618,
+      "name": "Chief Operating Officer",
+      "short": "COO",
+      "settings": 0,
+      "pilots": 0,
+      "aircrafts": 0,
+      "fleet": 0,
+      "flights": 0,
+      "partnerships": 0,
+      "advertisements": 0,
+      "fleet_id": 0
+    },
+    {
+      "id": 185619,
+      "name": "Chief Compliance Officer",
+      "short": "CCO",
+      "settings": 0,
+      "pilots": 0,
+      "aircrafts": 0,
+      "fleet": 0,
+      "flights": 0,
+      "partnerships": 0,
+      "advertisements": 0,
+      "fleet_id": 0
+    },
+    {
+      "id": 185620,
+      "name": "Trainee Pilot",
+      "short": "Trainee Pi",
+      "settings": 0,
+      "pilots": 0,
+      "aircrafts": 0,
+      "fleet": 0,
+      "flights": 0,
+      "partnerships": 0,
+      "advertisements": 0,
+      "fleet_id": 0
+    }
+  ]
+}

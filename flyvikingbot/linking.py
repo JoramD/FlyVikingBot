@@ -38,13 +38,13 @@ def clean_discord_name(value: str | None) -> str:
 def names_match(pilot: Pilot, website_name: str | None) -> bool:
     """Loose match between an FSA pilot and a website display name.
 
-    Matches the FSA username, 'name surname' or first name, ignoring case, accents,
+    Matches the FSA username, callsign, 'name surname' or first name, ignoring case, accents,
     spaces and punctuation ('Joram Davids' == 'JoramDavids' == 'joram.davids').
     """
     target = _compact(website_name)
     if not target:
         return False
-    candidates = {pilot.user, pilot.full_name, pilot.name, f"{pilot.surname or ''} {pilot.name or ''}"}
+    candidates = {pilot.user, pilot.callsign, pilot.full_name, pilot.name, f"{pilot.surname or ''} {pilot.name or ''}"}
     return any(_compact(c) == target for c in candidates if _compact(c))
 
 

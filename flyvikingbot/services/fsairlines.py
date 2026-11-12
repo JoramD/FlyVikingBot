@@ -18,6 +18,7 @@ import aiohttp
 from .http import ServiceError, get_json
 
 API_URL = "https://www.fsairlines.net/va_interface2.php"
+SITE_URL = "https://www.fsairlines.net/"
 RANK_CACHE_SECONDS = 3600
 
 
@@ -85,12 +86,15 @@ class FlightLog:
     pilot_name: str | None
     hours: float | None
     distance: float | None
-    rating: float | None
+    rating: float | None  # flight rating in percent (0-100)
     pax: int | None
     cargo_kg: int | None
-    landing_rate: int | None  # vertical speed at touchdown (fpm), detail only
+    landing_rate: int | None  # vertical speed at touchdown (fpm)
     flight_type: str | None
     completed_at: datetime | None
+    callsign: str | None = None  # pilot's VA callsign, e.g. FVK004
+    packages_kg: int | None = None
+    sim: str | None = None  # e.g. FS2024
 
     def merged(self, detail: FlightLog) -> FlightLog:
         """Fill gaps in this (list) record with values from the detail record."""
@@ -101,21 +105,32 @@ class FlightLog:
 @dataclass(frozen=True)
 class Pilot:
     id: str
-    user: str | None
+    user: str | None  # FSAirlines username
     name: str | None
     surname: str | None
-    rank: str | None
+    rank: str | None  # FSA returns the rank's short name here (e.g. "CEO")
     rank_id: int | None
     flights: int | None
     hours: float | None
-    rating: float | None
+    rating_total: float | None  # sum of all flight ratings, not an average
     distance: float | None
     location: str | None
     last_active: datetime | None
+    callsign: str | None = None  # VA callsign, e.g. FVK003
+    fsa_title: str | None = None  # FSAirlines-wide title, e.g. "Senior Flight Captain"
+    pax: int | None = None
+    cargo_kg: int | None = None  # cargo + packages
+    picture_url: str | None = None
 
     @property
     def full_name(self) -> str:
         return " ".join(p for p in (self.name, self.surname) if p) or self.user or f"Pilot {self.id}"
+
+    @property
+    def average_rating(self) -> float | None:
+        if self.rating_total is None or not self.flights:
+            return None
+        return self.rating_total / self.flights
 
 
 @dataclass(frozen=True)
@@ -127,6 +142,7 @@ class PilotSummary:
     name: str | None
     surname: str | None
     rank_id: int | None
+    callsign: str | None = None
 
 
 @dataclass(frozen=True)
@@ -156,7 +172,10 @@ def parse_flight_log(d: dict[str, Any]) -> FlightLog | None:
         cargo_kg=_int(d.get("cargo_kg")),
         landing_rate=_int(d.get("vs")),
         flight_type=_str(d.get("flighttype")),
-        completed_at=_datetime(d.get("ts")) or _datetime(d.get("arrtime")),
+        completed_at=_datetime(d.get("ts")),  # deptime/arrtime are HHMM clock times, not timestamps
+        callsign=_str(d.get("pid")),
+        packages_kg=_int(d.get("packages_kg")),
+        sim=_str(d.get("simversion")),
     )
 
 
@@ -164,19 +183,26 @@ def parse_pilot(d: dict[str, Any]) -> Pilot | None:
     pilot_id = _str(d.get("id"))
     if pilot_id is None:
         return None
+    cargo = [v for v in (_int(d.get("cargo_kg")), _int(d.get("packages_kg"))) if v is not None]
+    picture = _str(d.get("picture"))
     return Pilot(
         id=pilot_id,
-        user=_str(d.get("user")) or _str(d.get("va_user")),
+        user=_str(d.get("user")),
         name=_str(d.get("name")),
         surname=_str(d.get("surname")),
         rank=_str(d.get("rank")),
         rank_id=_int(d.get("rank_id")),
         flights=_int(d.get("flights")),
         hours=_float(d.get("hours")),
-        rating=_float(d.get("rating")),
+        rating_total=_float(d.get("rating")),
         distance=_float(d.get("distance")),
         location=_str(d.get("location")),
         last_active=_datetime(d.get("lastactive") or d.get("last_active")),
+        callsign=_str(d.get("va_user")),
+        fsa_title=_str(d.get("fsa_rating")),
+        pax=_int(d.get("pax")),
+        cargo_kg=sum(cargo) if cargo else None,
+        picture_url=(picture if picture.startswith("http") else SITE_URL + picture.lstrip("/")) if picture else None,
     )
 
 
@@ -186,10 +212,11 @@ def parse_pilot_summary(d: dict[str, Any]) -> PilotSummary | None:
         return None
     return PilotSummary(
         id=pilot_id,
-        user=_str(d.get("user")) or _str(d.get("va_user")),
+        user=_str(d.get("user")),
         name=_str(d.get("name")),
         surname=_str(d.get("surname")),
         rank_id=_int(d.get("rank_id")),
+        callsign=_str(d.get("va_user")),
     )
 
 
@@ -256,6 +283,18 @@ class FsaClient:
         if pilot is None:
             raise FsaNotFound(f"FSAirlines pilot {pilot_id} not found")
         return pilot
+
+    async def resolve_pilot_id(self, value: str) -> str | None:
+        """Turn what a member typed into an FSA pilot ID: a numeric ID is used as-is; a callsign (FVK003)
+        or FSAirlines username is looked up in the pilot list (one API call). None if unknown."""
+        value = value.strip()
+        if value.isdigit():
+            return value
+        wanted = value.casefold()
+        for pilot in await self.pilot_list():
+            if wanted in {(pilot.callsign or "").casefold(), (pilot.user or "").casefold()}:
+                return pilot.id
+        return None
 
     async def pilot_list(self) -> list[PilotSummary]:
         return [p for r in await self.call("getPilotList") if (p := parse_pilot_summary(r))]

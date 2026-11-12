@@ -29,28 +29,37 @@ def format_hours(hours: float | None) -> str | None:
     return f"{total_minutes // 60}:{total_minutes % 60:02d}"
 
 
-def flight_log_embed(flight: FlightLog, pilot_mention: str | None = None) -> discord.Embed:
+def flight_title(flight: FlightLog) -> str:
     route = f"{flight.dep or '????'} → {flight.arr or '????'}"
-    title = f"{flight.number} · {route}" if flight.number else route
-    embed = discord.Embed(title=title, colour=BRAND_COLOUR, timestamp=flight.completed_at)
+    number = flight.number
+    if number and number.upper() == "CHARTER":
+        number = "Charter"
+    return f"{number} · {route}" if number else route
+
+
+def flight_log_embed(flight: FlightLog, pilot_mention: str | None = None) -> discord.Embed:
+    embed = discord.Embed(title=flight_title(flight), colour=BRAND_COLOUR, timestamp=flight.completed_at)
 
     pilot = pilot_mention or flight.pilot_name or (f"Pilot {flight.pilot_id}" if flight.pilot_id else None)
+    if pilot and flight.callsign:
+        pilot = f"{pilot} ({flight.callsign})"
     fields: list[tuple[str, str | None]] = [
         ("Pilot", pilot),
         ("Aircraft", flight.aircraft),
         ("Block time", format_hours(flight.hours)),
         ("Distance", f"{flight.distance:,.0f} nm" if flight.distance is not None else None),
         ("Landing rate", f"{flight.landing_rate:+d} fpm" if flight.landing_rate is not None else None),
-        ("Rating", f"{flight.rating:g}" if flight.rating is not None else None),
+        ("Rating", f"{flight.rating:g}%" if flight.rating is not None else None),
         ("Passengers", f"{flight.pax:,}" if flight.pax else None),
         ("Cargo", f"{flight.cargo_kg:,} kg" if flight.cargo_kg else None),
+        ("Packages", f"{flight.packages_kg:,} kg" if flight.packages_kg else None),
     ]
     for name, value in fields:
         if value:
             embed.add_field(name=name, value=value, inline=True)
     if flight.planned_arr and flight.arr and flight.planned_arr != flight.arr:
         embed.description = f"Diverted, planned arrival was {flight.planned_arr}"
-    embed.set_footer(text="Completed flight")
+    embed.set_footer(text=" · ".join(p for p in ("Completed flight", flight.sim) if p))
     return embed
 
 

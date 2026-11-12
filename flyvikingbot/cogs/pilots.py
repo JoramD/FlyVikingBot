@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import re
@@ -19,7 +20,7 @@ from ..services.http import ServiceError
 from ..services.website import member_group_ids
 from ..storage import Link
 from ..webhooks import ips_events as ev
-from .flight_logs import format_hours
+from .flight_logs import flight_title, format_hours
 
 if TYPE_CHECKING:
     from ..bot import FlyVikingBot
@@ -27,6 +28,8 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 REVIEW_KEY = "review:{}"  # pending staff review, keyed by website member ID
+REVIEW_SENT_KEY = "review-sent:{}:{}"  # (member ID, entered values) already posted for review
+CALLSIGN_KEY = "fsa-callsign:{}"  # callsign/username -> pilot ID cache
 REPORTED_KEY = "reported:{}"  # problems already reported to staff (cleared once resolved)
 GROUP_CACHE_SECONDS = 3600
 
@@ -76,23 +79,30 @@ def review_view(ips_member_id: int) -> discord.ui.View:
 # --- embeds ----------------------------------------------------------------------------------------
 
 
-def pilot_embed(pilot: Pilot, mention: str | None, last_flight: Any | None) -> discord.Embed:
-    embed = discord.Embed(title=pilot.full_name, colour=BRAND_COLOUR)
+def pilot_embed(pilot: Pilot, mention: str | None, last_flight: Any | None, rank_name: str | None = None
+                ) -> discord.Embed:
+    title = f"{pilot.full_name} · {pilot.callsign}" if pilot.callsign else pilot.full_name
+    embed = discord.Embed(title=title, colour=BRAND_COLOUR)
     if mention:
         embed.description = mention
+    if pilot.picture_url:
+        embed.set_thumbnail(url=pilot.picture_url)
+    avg = pilot.average_rating
     for name, value in (
-        ("Rank", pilot.rank),
+        ("Rank", rank_name or pilot.rank),
         ("Hours", format_hours(pilot.hours)),
         ("Flights", f"{pilot.flights:,}" if pilot.flights is not None else None),
-        ("Avg. rating", f"{pilot.rating:g}" if pilot.rating is not None else None),
+        ("Avg. rating", f"{avg:.1f}%" if avg is not None else None),
         ("Distance", f"{pilot.distance:,.0f} nm" if pilot.distance is not None else None),
+        ("Passengers", f"{pilot.pax:,}" if pilot.pax else None),
+        ("Cargo", f"{pilot.cargo_kg:,} kg" if pilot.cargo_kg else None),
         ("Location", pilot.location),
         ("Last active", discord.utils.format_dt(pilot.last_active, "R") if pilot.last_active else None),
     ):
         if value:
             embed.add_field(name=name, value=value, inline=True)
     if last_flight:
-        parts = [f"{last_flight.dep or '????'} → {last_flight.arr or '????'}"]
+        parts = [flight_title(last_flight)]
         if last_flight.aircraft:
             parts.append(last_flight.aircraft)
         if last_flight.completed_at:
@@ -100,7 +110,10 @@ def pilot_embed(pilot: Pilot, mention: str | None, last_flight: Any | None) -> d
         if last_flight.landing_rate is not None:
             parts.append(f"{last_flight.landing_rate:+d} fpm")
         embed.add_field(name="Last flight", value=" · ".join(parts), inline=False)
-    embed.set_footer(text=f"FSAirlines pilot {pilot.id}")
+    footer = f"FSAirlines pilot {pilot.id}"
+    if pilot.fsa_title:
+        footer += f" · {pilot.fsa_title}"
+    embed.set_footer(text=footer)
     return embed
 
 
@@ -167,9 +180,33 @@ class Pilots(commands.Cog):
         except Exception:
             log.exception("Linking failed for website member %s", profile.member_id)
 
+    async def resolve_entered_pilot(self, entered: str | None) -> str | None:
+        """Pilot ID for what the member typed (ID, callsign or FSA username). Callsign lookups are cached,
+        because member_edited fires on every profile save. None if it can't be resolved."""
+        if not entered or not entered.strip():
+            return None
+        value = entered.strip()
+        if value.isdigit():
+            return value
+        cache_key = CALLSIGN_KEY.format(value.casefold())
+        if cached := await self.bot.storage.kv_get(cache_key):
+            return cached
+        try:
+            pilot_id = await self.bot.fsa.resolve_pilot_id(value)
+        except ServiceError as exc:
+            log.warning("Couldn't resolve FSA callsign %r: %s", value, exc)
+            return None
+        if pilot_id:
+            await self.bot.storage.kv_set(cache_key, pilot_id)
+        return pilot_id
+
     async def process_profile(self, profile: ev.MemberProfile) -> lk.Decision:
         storage, guild = self.bot.storage, self.bot.primary_guild()
         current = await storage.link_by_ips_member(profile.member_id, lk.SERVICE_FSA)
+        entered = profile.fsa_pilot_id
+        resolved = await self.resolve_entered_pilot(entered)
+        if resolved:
+            profile = dataclasses.replace(profile, fsa_pilot_id=resolved)
         inp = lk.LinkInput(profile=profile, current=current, pilot=None)
 
         if lk.needs_lookup(profile, current):
@@ -177,10 +214,12 @@ class Pilots(commands.Cog):
                 log.warning("Can't link: bot isn't in exactly one guild and GUILD_ID isn't set")
                 return lk.Decision(lk.Action.IGNORE)
             pilot_id = profile.fsa_pilot_id.strip()
-            try:
-                pilot = await self.bot.fsa.pilot(pilot_id)
-            except FsaNotFound:
-                pilot = None
+            pilot = None
+            if resolved:
+                try:
+                    pilot = await self.bot.fsa.pilot(pilot_id)
+                except FsaNotFound:
+                    pilot = None
             matches = self.find_discord_members(guild, profile.discord_name)
             inp = lk.LinkInput(
                 profile=profile,
@@ -194,6 +233,8 @@ class Pilots(commands.Cog):
         decision = lk.decide(inp)
         log.info("Website member %s: %s %s", profile.member_id, decision.action.value, "; ".join(decision.reasons))
 
+        if decision.action in (lk.Action.LINK, lk.Action.UNLINK):
+            await self.clear_review_markers(profile.member_id)
         if decision.action is lk.Action.LINK:
             await self.apply_link(profile, decision.discord_id, source="auto", pilot=inp.pilot)
             await self.bot.post_system_message(
@@ -207,15 +248,30 @@ class Pilots(commands.Cog):
                 f"· {_profile_link(profile.profile_url)}"
             )
         elif decision.action is lk.Action.REVIEW:
-            await self.request_review(profile, decision)
+            # Post each distinct problem once, not on every unrelated profile save
+            marker = REVIEW_SENT_KEY.format(
+                profile.member_id, f"{(entered or '').strip().casefold()}|{lk.clean_discord_name(profile.discord_name)}"
+            )
+            if await storage.kv_get(marker) is None:
+                await self.clear_review_markers(profile.member_id)
+                await storage.kv_set(marker, "1")
+                await self.request_review(profile, decision, entered=entered)
         return decision
 
-    async def request_review(self, profile: ev.MemberProfile, decision: lk.Decision) -> None:
+    async def clear_review_markers(self, ips_member_id: int) -> None:
+        for key in await self.bot.storage.kv_keys(REVIEW_SENT_KEY.format(ips_member_id, "")):
+            await self.bot.storage.kv_delete(key)
+
+    async def request_review(
+        self, profile: ev.MemberProfile, decision: lk.Decision, entered: str | None = None
+    ) -> None:
+        """Post a staff review. `profile` carries the resolved pilot ID; `entered` is what the member typed."""
         reasons = "\n".join(f"• {r}" for r in decision.reasons)
         header = (
             f"⚠️ **Couldn't link website member '{profile.name}' automatically** "
             f"· {_profile_link(profile.profile_url)}\n"
-            f"Entered: FSAirlines pilot `{profile.fsa_pilot_id}`, Discord `{profile.discord_name}`\n{reasons}"
+            f"Entered: FSAirlines pilot `{entered or profile.fsa_pilot_id}`, Discord `{profile.discord_name}`\n"
+            f"{reasons}"
         )
         if not decision.approvable:
             await self.bot.post_system_message(header + "\nThe member needs to correct their profile fields.")
@@ -575,19 +631,22 @@ class Pilots(commands.Cog):
             await interaction.followup.send(":x: ERROR: Could not reach FSAirlines.", ephemeral=True)
 
     @app_commands.command(name="pilot", description="Show FSAirlines pilot statistics")
-    @app_commands.describe(member="A linked server member (default: yourself)", pilot_id="Any FSAirlines pilot ID")
+    @app_commands.describe(
+        member="A linked server member (default: yourself)",
+        pilot="Any FSAirlines pilot: callsign (e.g. FVK003) or pilot ID",
+    )
     async def pilot(
         self,
         interaction: discord.Interaction,
         member: discord.Member | None = None,
-        pilot_id: app_commands.Range[int, 1] | None = None,
+        pilot: app_commands.Range[str, 1, 40] | None = None,
     ) -> None:
-        if member and pilot_id:
-            await interaction.response.send_message("Use either `member` or `pilot_id`, not both.", ephemeral=True)
+        if member and pilot:
+            await interaction.response.send_message("Use either `member` or `pilot`, not both.", ephemeral=True)
             return
 
-        mention = None
-        if pilot_id is None:
+        mention, fsa_id = None, None
+        if pilot is None:
             target = member or interaction.user
             link = await self.bot.storage.link_by_discord(target.id, lk.SERVICE_FSA)
             if link is None:
@@ -597,25 +656,28 @@ class Pilots(commands.Cog):
                     msg = (
                         "You haven't linked your FSAirlines pilot yet. On your "
                         f"[flyviking.net profile](<{self.settings.website_root}>), fill in your "
-                        "**FSAirlines Pilot ID** and **Discord username**; the bot links you automatically."
+                        "**FSAirlines Pilot ID** (or callsign) and **Discord username**; the bot links you "
+                        "automatically."
                     )
                 await interaction.response.send_message(msg, ephemeral=True)
                 return
             fsa_id, mention = link.external_id, f"<@{link.discord_id}>"
-        else:
-            fsa_id = str(pilot_id)
-            if link := await self.bot.storage.link_by_external(lk.SERVICE_FSA, fsa_id):
-                mention = f"<@{link.discord_id}>"
 
         await interaction.response.defer(thinking=True)
         try:
-            pilot = await self.bot.fsa.pilot(fsa_id)
+            if fsa_id is None:
+                fsa_id = await self.bot.fsa.resolve_pilot_id(pilot)
+                if fsa_id is None:
+                    raise FsaNotFound(pilot)
+                if link := await self.bot.storage.link_by_external(lk.SERVICE_FSA, fsa_id):
+                    mention = f"<@{link.discord_id}>"
+            data = await self.bot.fsa.pilot(fsa_id)
         except FsaNotFound:
             await interaction.delete_original_response()
-            await interaction.followup.send(f":x: FSAirlines pilot `{fsa_id}` not found.", ephemeral=True)
+            await interaction.followup.send(f":x: FSAirlines pilot `{pilot or fsa_id}` not found.", ephemeral=True)
             return
         except ServiceError as exc:
-            log.error("Could not retrieve pilot %s: %s", fsa_id, exc)
+            log.error("Could not retrieve pilot %s: %s", pilot or fsa_id, exc)
             await interaction.delete_original_response()
             await interaction.followup.send(":x: ERROR: Could not retrieve data from FSAirlines", ephemeral=True)
             return
@@ -623,7 +685,11 @@ class Pilots(commands.Cog):
             flights = await self.bot.fsa.flight_logs(count=1, pilot_id=fsa_id)
         except ServiceError:
             flights = []
-        await interaction.followup.send(embed=pilot_embed(pilot, mention, flights[-1] if flights else None))
+        try:
+            rank_name = next((r.name for r in await self.bot.fsa.ranks() if r.id == data.rank_id), None)
+        except ServiceError:
+            rank_name = None
+        await interaction.followup.send(embed=pilot_embed(data, mention, flights[-1] if flights else None, rank_name))
 
 
 async def setup(bot: FlyVikingBot) -> None:

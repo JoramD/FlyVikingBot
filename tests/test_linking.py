@@ -8,7 +8,7 @@ from flyvikingbot.webhooks.ips_events import MemberProfile
 
 def pilot(**kw):
     base = dict(id="100", user="jdavids", name="Joram", surname="Davids", rank="Captain", rank_id=2, flights=1,
-                hours=1.0, rating=9.0, distance=1.0, location="BIKF", last_active=None)
+                hours=1.0, rating_total=9.0, distance=1.0, location="BIKF", last_active=None)
     return Pilot(**{**base, **kw})
 
 
