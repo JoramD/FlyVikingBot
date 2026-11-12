@@ -60,11 +60,37 @@ class WebhookServer:
         self.app = self._build_app()
 
     def _build_app(self) -> web.Application:
-        app = web.Application()
+        app = web.Application(middlewares=[self._log_requests])
         app.router.add_get("/health", self._health)
-        app.router.add_post("/ips/{secret}", self._receive)
-        app.router.add_post("/ips/{secret}/{event}", self._receive)
+        # Accept an optional trailing slash; IPS (or a proxy) may add one
+        for path in ("/ips/{secret}", "/ips/{secret}/", "/ips/{secret}/{event}", "/ips/{secret}/{event}/"):
+            app.router.add_post(path, self._receive)
         return app
+
+    def _mask(self, path: str) -> str:
+        return path.replace(self._secret.decode(), "<secret>")
+
+    @web.middleware
+    async def _log_requests(self, request: web.Request, handler) -> web.StreamResponse:
+        """Log every request (secret masked), including ones no route matches."""
+        status = 500
+        try:
+            response = await handler(request)
+            status = response.status
+            return response
+        except web.HTTPException as exc:
+            status = exc.status
+            raise
+        finally:
+            if request.path != "/health":
+                log.info(
+                    "Webhook HTTP %s %s from %s -> %s (UA: %s)",
+                    request.method,
+                    self._mask(request.path_qs),
+                    request.remote,
+                    status,
+                    request.headers.get("User-Agent", "-"),
+                )
 
     async def start(self, host: str, port: int) -> None:
         self._runner = web.AppRunner(self.app, access_log=None)

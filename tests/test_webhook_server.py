@@ -70,6 +70,22 @@ async def test_capture_pruning_and_redaction(receiver):
     assert record["headers"]["Authorization"] == "<redacted>"
 
 
+async def test_trailing_slash_accepted(receiver):
+    client, received, _ = receiver
+    resp = await client.post(f"/ips/{SECRET}/galleryImage_create/", json={"id": 4})
+    assert resp.status == 200
+    assert received == [("galleryImage_create", {"id": 4})]
+
+
+async def test_unmatched_requests_are_logged_with_secret_masked(receiver, caplog):
+    client, _, _ = receiver
+    caplog.set_level("INFO")
+    resp = await client.get(f"/ips/{SECRET}/galleryImage_create")
+    assert resp.status == 405
+    assert "GET /ips/<secret>/galleryImage_create" in caplog.text
+    assert SECRET not in caplog.text
+
+
 def test_short_secret_rejected():
     with pytest.raises(ValueError):
         WebhookServer("short", lambda e, p: None)
