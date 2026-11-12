@@ -182,6 +182,15 @@ class Pilots(commands.Cog):
         except Exception:
             log.exception("Linking failed for website member %s", profile.member_id)
 
+    async def ensure_link(self, user: discord.abc.User) -> tuple[Link | None, str | None]:
+        """The rule for any feature that needs a member's link: use stored data, and if it's missing, fetch it
+        from the website (when possible, rate-limited by the per-user cooldown). Returns (link, note for the
+        member). Don't read storage directly in features; call this so missed webhooks are self-healing."""
+        link = await self.bot.storage.link_by_discord(user.id, lk.SERVICE_FSA)
+        if link is not None:
+            return link, None
+        return await self.link_from_website(user)
+
     async def link_from_website(self, user: discord.abc.User) -> tuple[Link | None, str | None]:
         """On-demand catch-up for an unlinked Discord user: find website members whose "Discord username"
         field names this user and run them through the normal linking. Covers profiles saved while the bot
@@ -653,10 +662,7 @@ class Pilots(commands.Cog):
                 summary = "\n".join(changes) if changes else "No changes."
                 await interaction.followup.send(f"{summary}\n{unchanged} member(s) already up to date.", ephemeral=True)
                 return
-            link = await self.bot.storage.link_by_discord(member.id, lk.SERVICE_FSA)
-            if link is None:
-                # Their profile may have been filled in while the bot was offline: check the website now
-                link, note = await self.link_from_website(member)
+            link, note = await self.ensure_link(member)
             if link is None:
                 msg = f"{member.mention} isn't linked to an FSAirlines pilot."
                 if note:
@@ -693,10 +699,7 @@ class Pilots(commands.Cog):
         mention, fsa_id = None, None
         if pilot is None:
             target = member or interaction.user
-            link = await self.bot.storage.link_by_discord(target.id, lk.SERVICE_FSA)
-            if link is None:
-                # Not linked yet: the profile may have been filled in while the bot was offline, so check now
-                link, note = await self.link_from_website(target)
+            link, note = await self.ensure_link(target)
             if link is None:
                 if member:
                     msg = f"{member.mention} hasn't linked an FSAirlines pilot."

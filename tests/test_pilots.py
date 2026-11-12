@@ -298,3 +298,18 @@ async def test_sync_rank_member_links_on_demand(env):
 async def test_other_commands_do_not_look_up_links(env):
     # Only /pilot and /sync_rank need link info; no global per-command hook exists
     assert not hasattr(env.cog, "on_app_command_completion")
+
+
+async def test_ensure_link_rule(env):
+    env.bot.website = SimpleNamespace(list_members=AsyncMock(return_value=[member_payload(name="Joram Davids")]))
+    user = SimpleNamespace(id=1, name="joramd")
+    link, _ = await env.cog.ensure_link(user)  # missing -> fetched from the website
+    assert link.external_id == "100"
+    env.bot.website.list_members.reset_mock()
+    link, _ = await env.cog.ensure_link(user)  # stored -> no website call
+    assert link.external_id == "100"
+    env.bot.website.list_members.assert_not_awaited()
+    stranger = SimpleNamespace(id=9, name="stranger")
+    await env.cog.ensure_link(stranger)
+    await env.cog.ensure_link(stranger)  # within the cooldown -> one lookup only
+    env.bot.website.list_members.assert_awaited_once()
