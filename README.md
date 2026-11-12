@@ -59,9 +59,15 @@ Set `GUILD_ID` to make slash commands sync instantly to that server. Run the tes
    <BOT_URL>/ips/<WEBHOOK_SECRET>/downloads_new_version
    ```
    `<BOT_URL>` is `http://flyviking-discord-bot:8080` on the shared Docker network, or `https://<WEBHOOK_HOST>` through Traefik.
-   Putting the event in the URL makes routing independent of how IPS labels its requests. A single webhook pointing at `/ips/<WEBHOOK_SECRET>` also works, but only if IPS sends the event name in a header or the body.
-3. Optionally set `ANNOUNCEMENT_BLOG_ID` so that only entries from the announcements blog are posted.
-4. While `WEBHOOK_CAPTURE=true`, every request is saved to `data/webhook_samples/` with the auth headers redacted. This is useful for checking what IPS actually sends.
+   IPS sends the bare content object with no event name, so the event **must** be in the URL path.
+3. Set `ANNOUNCEMENT_BLOG_ID` (currently `1`) so that only entries from the announcements blog are posted.
+4. While `WEBHOOK_CAPTURE=true`, every request is saved to `data/webhook_samples/`, with auth headers and member emails/IPs redacted. This is useful for checking what IPS actually sends.
+
+> **Delivery runs through IPS's background tasks.** Webhooks are queued and sent by the IPS **cron** task, not when the content is posted. As a result:
+> - The **cron container** (and the PHP container) must be on the `flyviking` network, or they can't resolve `flyviking-discord-bot` and deliveries fail silently on the bot's side.
+> - Discord posts arrive up to one cron interval after publishing.
+>
+> To troubleshoot, each request the bot receives is logged as `Webhook HTTP <method> <path> from <ip> -> <status>`, with the secret masked. To find out which container sent a request, compare its IP with `docker network inspect flyviking`.
 
 Health check: `GET /health`.
 
