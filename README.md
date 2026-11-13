@@ -138,6 +138,16 @@ docker compose exec bot python -m flyvikingbot.tools.fsa_sample [pilot_id]
 ```
 It makes about 5 calls and writes them, with personal data redacted, to `data/fsa_samples/`.
 
+## Previewing posts
+To see how the automatic posts look without posting on the website or flying a flight, set `CHANNEL_BOT_DEVELOPMENT` and run on the server:
+```sh
+docker compose exec bot python -m flyvikingbot.tools.preview_posts             # every post type
+docker compose exec bot python -m flyvikingbot.tools.preview_posts gallery     # only some (--list shows the names)
+```
+It posts sample data to the bot development channel using the bot's real message builders, with all pings switched off. It can run while the bot is online.
+
+**Rule for new post types:** every automatic post gets a `*_message` builder in its cog, and that builder gets an entry with sample data in `PREVIEWS` in `flyvikingbot/tools/preview_posts.py`. A test fails when one is missing.
+
 ## Project layout
 ```
 flyvikingbot/
@@ -149,6 +159,6 @@ flyvikingbot/
   cogs/               one module per feature (airline, website, admin, status, website_events, flight_logs, pilots)
   services/           async API clients (FSAirlines, Invision Community)
   webhooks/           webhook HTTP receiver and IPS payload parsing
-  tools/              maintenance scripts (fsa_sample)
+  tools/              maintenance scripts (fsa_sample, preview_posts)
 tests/
 ```

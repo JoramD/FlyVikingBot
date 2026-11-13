@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import discord
 from discord.ext import commands, tasks
@@ -63,6 +63,12 @@ def flight_log_embed(flight: FlightLog, pilot_mention: str | None = None) -> dis
     return embed
 
 
+def flight_log_message(flight: FlightLog, pilot_mention: str | None = None) -> dict[str, Any]:
+    """The flight log post (channel.send() kwargs; see the RULE in tools/preview_posts.py).
+    The pilot's mention is shown but never pings: it's in an embed, and mentions are off."""
+    return {"embed": flight_log_embed(flight, pilot_mention), "allowed_mentions": discord.AllowedMentions.none()}
+
+
 class FlightLogs(commands.Cog):
     def __init__(self, bot: FlyVikingBot, channel_id: int) -> None:
         self.bot = bot
@@ -119,7 +125,7 @@ class FlightLogs(commands.Cog):
                 mention = f"<@{link.discord_id}>"
 
             # Raises on failure, so the stored ID isn't advanced and the flight is retried next cycle
-            await channel.send(embed=flight_log_embed(flight, mention), allowed_mentions=discord.AllowedMentions.none())
+            await channel.send(**flight_log_message(flight, mention))
             await storage.kv_set(LAST_ID_KEY, str(flight.id))
             posted += 1
         return posted

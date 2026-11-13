@@ -34,7 +34,7 @@ async def test_gallery_uploads_image_as_attachment(tmp_path):
     file = call.kwargs["file"]
     assert file.filename.startswith("large.Screenshot") and file.filename.endswith(".png")
     # Author line with the profile link wrapped in <> so Discord doesn't add a preview
-    assert call.args[0] == "Uploaded by [Alexhs2](<https://flyviking.net/profile/3-alexhs2/>)"
+    assert call.kwargs["content"] == "Uploaded by [Alexhs2](<https://flyviking.net/profile/3-alexhs2/>)"
     assert call.kwargs["allowed_mentions"].everyone is False
     ch[100].send.assert_not_awaited()
 
@@ -43,7 +43,7 @@ async def test_gallery_falls_back_to_link_when_download_fails(tmp_path):
     cog, ch = make_cog(tmp_path)  # http_session=None -> no download possible
     await cog.handle(ev.GALLERY_IMAGE_CREATE, load_fixture("real_galleryImage_create"))
     ch[200].send.assert_awaited_once()
-    text = ch[200].send.await_args.args[0]
+    text = ch[200].send.await_args.kwargs["content"]
     line, url = text.split("\n")
     assert line.startswith("Uploaded by [Alexhs2]")
     assert "/large.Screenshot" in url
@@ -55,7 +55,7 @@ async def test_gallery_without_author_posts_image_only(tmp_path):
     payload = load_fixture("real_galleryImage_create")
     del payload["author"]
     await cog.handle(ev.GALLERY_IMAGE_CREATE, payload)
-    assert ch[200].send.await_args.args[0] is None
+    assert ch[200].send.await_args.kwargs["content"] is None
 
 
 @pytest.fixture
@@ -93,7 +93,7 @@ async def test_real_ips_blog_entry_payload(tmp_path):
     await cog.handle(ev.BLOG_ENTRY_CREATE, load_fixture("real_blogEntry_create"))
     call = ch[100].send.await_args
     embed = call.kwargs["embed"]
-    assert call.args[0] == "@everyone"
+    assert call.kwargs["content"] == "@everyone"
     assert embed.title == "Test9"
     assert embed.url == "https://flyviking.net/blogs/entry/21-test9/"
     assert embed.description == "9"
@@ -112,7 +112,7 @@ async def test_real_ips_downloads_payloads(tmp_path, event, text):
     await cog.handle(event, load_fixture(f"real_{event}"))
     call = ch[100].send.await_args
     embed = call.kwargs["embed"]
-    assert call.args[0] == text
+    assert call.kwargs["content"] == text
     assert call.kwargs["allowed_mentions"].everyone is False
     assert embed.title == "Test"
     assert embed.url == "https://flyviking.net/files/file/34-test/"

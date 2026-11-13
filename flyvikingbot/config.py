@@ -27,6 +27,7 @@ class Settings:
     guild_id: int | None
     channel_announcements: int | None  # blog announcements + new downloads; unset = not posted
     channel_screenshots: int | None  # new gallery images; unset = not posted
+    channel_bot_development: int | None  # message previews (tools/preview_posts); unset = tool refuses
 
     webhook_secret: str
     webhook_bind: str
@@ -103,6 +104,7 @@ def load_settings(
         guild_id=optional_int("GUILD_ID"),
         channel_announcements=optional_int("CHANNEL_ANNOUNCEMENTS"),
         channel_screenshots=optional_int("CHANNEL_SCREENSHOTS"),
+        channel_bot_development=optional_int("CHANNEL_BOT_DEVELOPMENT"),
         webhook_secret=require("WEBHOOK_SECRET"),
         webhook_bind=get("WEBHOOK_BIND", "0.0.0.0"),
         webhook_port=int_with_default("WEBHOOK_PORT", "8080"),

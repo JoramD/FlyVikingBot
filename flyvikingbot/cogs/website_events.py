@@ -93,6 +93,36 @@ def author_line(author: ev.Author | None) -> str | None:
     return f"Uploaded by [{name}](<{author.profile_url}>)" if author.profile_url else f"Uploaded by {name}"
 
 
+# --- complete messages ------------------------------------------------------------------------------------------------
+# Each *_message function returns the keyword arguments for channel.send(). RULE: every kind of automatic post
+# has one, and it is listed in tools/preview_posts.py (a test enforces this).
+
+
+def announcement_message(entry: ev.BlogEntry) -> dict[str, Any]:
+    return {
+        "content": "@everyone",
+        "embed": announcement_embed(entry),
+        "allowed_mentions": discord.AllowedMentions(everyone=True, users=False, roles=False),
+    }
+
+
+def file_message(file: ev.DownloadsFile, *, new_version: bool) -> dict[str, Any]:
+    return {
+        "content": "New version available" if new_version else "New file available",
+        "embed": file_embed(file, new_version=new_version),
+        "allowed_mentions": NO_MENTIONS,
+    }
+
+
+def gallery_message(image: ev.GalleryImage, data: bytes | None) -> dict[str, Any]:
+    """The uploaded image with an author line, or the image link if it couldn't be downloaded."""
+    line = author_line(image.author)
+    if data:
+        file = discord.File(io.BytesIO(data), filename=_filename(image.image_url))
+        return {"content": line, "file": file, "allowed_mentions": NO_MENTIONS}
+    return {"content": f"{line}\n{image.image_url}" if line else image.image_url, "allowed_mentions": NO_MENTIONS}
+
+
 class WebsiteEvents(commands.Cog):
     def __init__(self, bot: FlyVikingBot) -> None:
         self.bot = bot
@@ -153,17 +183,7 @@ class WebsiteEvents(commands.Cog):
             channel = await self._channel(self.settings.channel_screenshots, "CHANNEL_SCREENSHOTS") if image else None
             if image and channel:
                 # Upload the image ourselves: Discord can't always unfurl flyviking.net links
-                line = author_line(image.author)
-                data = await self._fetch_image(image.image_url)
-                if data:
-                    await channel.send(
-                        line,
-                        file=discord.File(io.BytesIO(data), filename=_filename(image.image_url)),
-                        allowed_mentions=NO_MENTIONS,
-                    )
-                else:
-                    text = f"{line}\n{image.image_url}" if line else image.image_url
-                    await channel.send(text, allowed_mentions=NO_MENTIONS)
+                await channel.send(**gallery_message(image, await self._fetch_image(image.image_url)))
 
         elif event == ev.BLOG_ENTRY_CREATE:
             entry = ev.parse_blog_entry(payload)
@@ -176,22 +196,14 @@ class WebsiteEvents(commands.Cog):
             channel = await self._channel(self.settings.channel_announcements, "CHANNEL_ANNOUNCEMENTS")
             if channel is None:
                 return
-            await channel.send(
-                "@everyone",
-                embed=announcement_embed(entry),
-                allowed_mentions=discord.AllowedMentions(everyone=True, users=False, roles=False),
-            )
+            await channel.send(**announcement_message(entry))
 
         elif event in (ev.DOWNLOADS_FILE_CREATE, ev.DOWNLOADS_NEW_VERSION):
             new_version = event == ev.DOWNLOADS_NEW_VERSION
             if (file := ev.parse_downloads_file(payload, event)) and (
                 channel := await self._channel(self.settings.channel_announcements, "CHANNEL_ANNOUNCEMENTS")
             ):
-                await channel.send(
-                    "New version available" if new_version else "New file available",
-                    embed=file_embed(file, new_version=new_version),
-                    allowed_mentions=NO_MENTIONS,
-                )
+                await channel.send(**file_message(file, new_version=new_version))
 
         elif event not in ev.MEMBER_EVENTS:  # member events are handled by the pilots cog
             log.info("Ignoring unhandled webhook event %s", event)
