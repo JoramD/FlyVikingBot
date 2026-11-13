@@ -187,6 +187,11 @@ def parse_blog_entry(payload: Any) -> BlogEntry | None:
     )
 
 
+def _image_url(value: Any) -> str | None:
+    """Screenshots are plain URLs in some payloads and {"url": ...} objects in others."""
+    return _str(value.get("url")) if isinstance(value, dict) else _str(value)
+
+
 def parse_downloads_file(payload: Any, event: str = DOWNLOADS_FILE_CREATE) -> DownloadsFile | None:
     data = unwrap(payload)  # downloads_new_version sends the same File object as downloadsFile_create
     url = _str(data.get("url"))
@@ -202,7 +207,7 @@ def parse_downloads_file(payload: Any, event: str = DOWNLOADS_FILE_CREATE) -> Do
         author=parse_author(data),
         excerpt=excerpt(data.get("description")),
         category=_str(_nested(data, "category", "name")),
-        image_url=_first(data.get("primaryScreenshot"), first_screenshot),
+        image_url=_first(_image_url(data.get("primaryScreenshot")), _image_url(first_screenshot)),
         changelog=excerpt(data.get("changelog"), limit=1000),
         date=_date(data.get("updated")) or _date(data.get("date")),
     )

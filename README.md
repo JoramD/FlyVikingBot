@@ -6,7 +6,7 @@ Discord bot for the FlyViking virtual airline, connecting [flyviking.net](https:
 
 **Slash commands**
 - `/airline_statistics`: airline-wide statistics from FSAirlines
-- `/paint_lookup <query>`: find an aircraft paint in the website's downloads
+- `/file_lookup <query>`: find a file (paint, configuration, ...) in the website's downloads
 - `/clear <amount>`: delete the last 1–50 messages (administrators only)
 - `/pilot [member] [pilot]`: FSAirlines pilot stats. Shows rank, hours, flights, average rating, distance, passengers, cargo, location, last active and last flight. With no option it shows your own linked pilot. `pilot` accepts a callsign (`FVK003`) or a pilot ID.
 - `/sync_rank [member]`: sync FSAirlines rank roles right away (staff with Manage Roles only)
@@ -77,7 +77,7 @@ Everything the bot needs outside this repository, in one place. Details follow i
 
 **Website (Invision Community ACP)**
 - [ ] REST API key (`WEBSITE_API_KEY`) allowed to use:
-  - `GET /core/search` and `GET /downloads/files/{id}` (`/paint_lookup`)
+  - `GET /core/search` and `GET /downloads/files/{id}` (`/file_lookup`)
   - `GET /core/members` (on-demand linking)
   - `GET /core/groups`, `GET /core/members/{id}` and `POST /core/members/{id}` (website rank groups)
 - [ ] Webhooks (one per event) to `http://flyviking-bot:8080/ips/<WEBHOOK_SECRET>/<event>`: `galleryImage_create`, `blogEntry_create`, `downloadsFile_create`, `downloads_new_version` and `member_edited`.
