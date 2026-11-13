@@ -37,6 +37,7 @@ class Author:
     name: str
     profile_url: str | None
     avatar_url: str | None  # None for IPS's generated letter avatar
+    member_id: int | None = None  # website member ID; finds their Discord account if they're linked
 
 
 @dataclass(frozen=True)
@@ -153,7 +154,9 @@ def parse_author(data: dict[str, Any]) -> Author | None:
     if not isinstance(author, dict) or not (name := _str(author.get("name"))):
         return None
     avatar = None if author.get("photoUrlIsDefault") else _str(author.get("photoUrl"))
-    return Author(name=name, profile_url=_str(author.get("profileUrl")), avatar_url=avatar)
+    return Author(
+        name=name, profile_url=_str(author.get("profileUrl")), avatar_url=avatar, member_id=_int(author.get("id"))
+    )
 
 
 def parse_gallery_image(payload: Any) -> GalleryImage | None:

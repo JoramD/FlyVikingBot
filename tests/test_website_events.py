@@ -254,3 +254,29 @@ async def test_new_file_post_shows_full_category_path(tmp_path):
         5: ("Add-ons", None), 6: ("GSX Configurations", 5)}))
     await cog.handle(ev.DOWNLOADS_FILE_CREATE, load_fixture("real_downloadsFile_create"))
     assert ch[100].send.await_args.kwargs["embed"].footer.text == "Add-ons › GSX Configurations · flyviking.net"
+
+
+@pytest.mark.parametrize(
+    ("linked", "in_server", "content"),
+    [
+        (True, True, "Uploaded by <@77>"),  # linked: their Discord account (shown, never pinged)
+        (True, False, "Uploaded by [Alexhs2](<https://flyviking.net/profile/3-alexhs2/>)"),  # left the server
+        (False, True, "Uploaded by [Alexhs2](<https://flyviking.net/profile/3-alexhs2/>)"),  # not linked
+    ],
+)
+async def test_gallery_uploader_shown_as_discord_member_when_linked(tmp_path, linked, in_server, content):
+    from flyvikingbot.storage import Storage
+
+    cog, ch = make_cog(tmp_path)
+    cog.bot.storage = Storage(tmp_path / "db.sqlite")
+    await cog.bot.storage.init()
+    if linked:  # website member 3 (the fixture's author) is linked to Discord user 77
+        await cog.bot.storage.save_link(discord_id=77, ips_member_id=3, ips_profile_url=None, discord_name="alex",
+                                        service="fsa", external_id="100", source="auto")
+    members = {77: object()} if in_server else {}
+    cog.bot.primary_guild = lambda: SimpleNamespace(get_member=members.get)
+    cog._fetch_image = AsyncMock(return_value=b"\x89PNG fake")
+    await cog.handle(ev.GALLERY_IMAGE_CREATE, load_fixture("real_galleryImage_create"))
+    call = ch[200].send.await_args
+    assert call.kwargs["content"] == content
+    assert call.kwargs["allowed_mentions"].users is False  # the mention never pings

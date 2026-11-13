@@ -102,6 +102,15 @@ class Storage:
     async def link_by_external(self, service: str, external_id: str) -> Link | None:
         return await self._one("a.service = ? AND a.external_id = ?", (service, external_id))
 
+    async def discord_id_for_ips_member(self, ips_member_id: int) -> int | None:
+        """The Discord account linked to a website member (any service), or None."""
+
+        def q(conn):
+            row = conn.execute("SELECT discord_id FROM members WHERE ips_member_id = ?", (ips_member_id,)).fetchone()
+            return row[0] if row else None
+
+        return await self._run(q)
+
     async def all_links(self, service: str) -> list[Link]:
         def q(conn):
             rows = conn.execute(f"{_LINK_SELECT} WHERE a.service = ? ORDER BY m.discord_id", (service,)).fetchall()

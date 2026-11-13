@@ -87,11 +87,14 @@ def file_embed(file: ev.DownloadsFile, *, new_version: bool) -> discord.Embed:
     return embed
 
 
-def author_line(author: ev.Author | None) -> str | None:
-    """'Uploaded by <name>' with the profile linked. The <> stops Discord previewing the link, so the
-    uploaded image stays full size."""
+def author_line(author: ev.Author | None, mention: str | None = None) -> str | None:
+    """'Uploaded by @member' when the author is linked to a Discord member (mentions never ping these
+    posts), otherwise their website name linked to their profile. The <> stops Discord previewing the
+    link, so the uploaded image stays full size."""
     if author is None:
         return None
+    if mention:
+        return f"Uploaded by {mention}"
     name = discord.utils.escape_markdown(author.name)
     return f"Uploaded by [{name}](<{author.profile_url}>)" if author.profile_url else f"Uploaded by {name}"
 
@@ -130,10 +133,13 @@ def file_message(file: ev.DownloadsFile, *, new_version: bool) -> dict[str, Any]
     }
 
 
-def gallery_message(image: ev.GalleryImage, data: bytes | None, source_url: str | None = None) -> dict[str, Any]:
+def gallery_message(
+    image: ev.GalleryImage, data: bytes | None, source_url: str | None = None, mention: str | None = None
+) -> dict[str, Any]:
     """The uploaded image with an author line, or the image link if it couldn't be downloaded.
-    `source_url` is the version `data` came from (original or large), for the file name."""
-    line = author_line(image.author)
+    `source_url` is the version `data` came from (original or large), for the file name; `mention` is
+    the author's Discord mention when they're linked."""
+    line = author_line(image.author, mention)
     if data:
         file = discord.File(io.BytesIO(data), filename=_filename(source_url or image.image_url))
         return {"content": line, "file": file, "allowed_mentions": NO_MENTIONS}
@@ -189,6 +195,15 @@ class WebsiteEvents(commands.Cog):
             log.warning("Image download failed (%s): %s", type(exc).__name__, url)
             return None
 
+    async def author_mention(self, author: ev.Author | None) -> str | None:
+        """The author's Discord mention if their website account is linked and they're in the server."""
+        storage = getattr(self.bot, "storage", None)
+        if author is None or author.member_id is None or storage is None:
+            return None
+        discord_id = await storage.discord_id_for_ips_member(author.member_id)
+        guild = self.bot.primary_guild() if discord_id else None
+        return f"<@{discord_id}>" if guild and guild.get_member(discord_id) else None
+
     async def _fetch_gallery_image(self, image: ev.GalleryImage) -> tuple[bytes | None, str | None]:
         """The best version that fits Discord's upload limit: the original upload, else IPS's resized
         "large" version. Returns (data, the URL it came from), or (None, None) to fall back to the link."""
@@ -213,7 +228,9 @@ class WebsiteEvents(commands.Cog):
             channel = await self._channel(self.settings.channel_screenshots, "CHANNEL_SCREENSHOTS") if image else None
             if image and channel:
                 # Upload the image ourselves: Discord can't always unfurl flyviking.net links
-                await channel.send(**gallery_message(image, *await self._fetch_gallery_image(image)))
+                data, source = await self._fetch_gallery_image(image)
+                mention = await self.author_mention(image.author)
+                await channel.send(**gallery_message(image, data, source, mention))
 
         elif event == ev.BLOG_ENTRY_CREATE:
             entry = ev.parse_blog_entry(payload)
