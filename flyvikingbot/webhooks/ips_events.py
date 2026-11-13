@@ -44,8 +44,9 @@ class GalleryImage:
     """A new gallery image; posted to #screenshots."""
 
     url: str | None  # the image's gallery page
-    image_url: str  # the image file itself (large version if available)
+    image_url: str  # IPS's resized "large" version if available (also the link fallback)
     author: Author | None = None
+    original_url: str | None = None  # the full-quality upload; preferred when it fits Discord's size limit
 
 
 @dataclass(frozen=True)
@@ -161,7 +162,12 @@ def parse_gallery_image(payload: Any) -> GalleryImage | None:
     if not image_url:
         _missing(GALLERY_IMAGE_CREATE, "images", data)
         return None
-    return GalleryImage(url=_str(data.get("url")), image_url=image_url, author=parse_author(data))
+    return GalleryImage(
+        url=_str(data.get("url")),
+        image_url=image_url,
+        author=parse_author(data),
+        original_url=_str(_nested(data, "images", "original")),
+    )
 
 
 def parse_blog_entry(payload: Any) -> BlogEntry | None:

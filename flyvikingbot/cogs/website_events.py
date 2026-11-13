@@ -130,11 +130,12 @@ def file_message(file: ev.DownloadsFile, *, new_version: bool) -> dict[str, Any]
     }
 
 
-def gallery_message(image: ev.GalleryImage, data: bytes | None) -> dict[str, Any]:
-    """The uploaded image with an author line, or the image link if it couldn't be downloaded."""
+def gallery_message(image: ev.GalleryImage, data: bytes | None, source_url: str | None = None) -> dict[str, Any]:
+    """The uploaded image with an author line, or the image link if it couldn't be downloaded.
+    `source_url` is the version `data` came from (original or large), for the file name."""
     line = author_line(image.author)
     if data:
-        file = discord.File(io.BytesIO(data), filename=_filename(image.image_url))
+        file = discord.File(io.BytesIO(data), filename=_filename(source_url or image.image_url))
         return {"content": line, "file": file, "allowed_mentions": NO_MENTIONS}
     return {"content": f"{line}\n{image.image_url}" if line else image.image_url, "allowed_mentions": NO_MENTIONS}
 
@@ -173,7 +174,7 @@ class WebsiteEvents(commands.Cog):
                     log.warning("Image download returned HTTP %s: %s", resp.status, url)
                     return None
                 if (resp.content_length or 0) > MAX_UPLOAD_BYTES:
-                    log.info("Image too large to upload (%s bytes), posting link: %s", resp.content_length, url)
+                    log.info("Image too large to upload (%s bytes): %s", resp.content_length, url)
                     return None
                 # Read every chunk: content.read(n) returns as soon as *some* data has arrived, which
                 # uploaded only the top strip of the image
@@ -181,12 +182,20 @@ class WebsiteEvents(commands.Cog):
                 async for chunk in resp.content.iter_chunked(64 * 1024):
                     data += chunk
                     if len(data) > MAX_UPLOAD_BYTES:
-                        log.info("Image too large to upload, posting link: %s", url)
+                        log.info("Image too large to upload: %s", url)
                         return None
                 return bytes(data)
         except (aiohttp.ClientError, TimeoutError) as exc:
             log.warning("Image download failed (%s): %s", type(exc).__name__, url)
             return None
+
+    async def _fetch_gallery_image(self, image: ev.GalleryImage) -> tuple[bytes | None, str | None]:
+        """The best version that fits Discord's upload limit: the original upload, else IPS's resized
+        "large" version. Returns (data, the URL it came from), or (None, None) to fall back to the link."""
+        for url in dict.fromkeys(u for u in (image.original_url, image.image_url) if u):
+            if data := await self._fetch_image(url):
+                return data, url
+        return None, None
 
     @commands.Cog.listener()
     async def on_ips_webhook(self, event: str, payload: Any) -> None:
@@ -204,7 +213,7 @@ class WebsiteEvents(commands.Cog):
             channel = await self._channel(self.settings.channel_screenshots, "CHANNEL_SCREENSHOTS") if image else None
             if image and channel:
                 # Upload the image ourselves: Discord can't always unfurl flyviking.net links
-                await channel.send(**gallery_message(image, await self._fetch_image(image.image_url)))
+                await channel.send(**gallery_message(image, *await self._fetch_gallery_image(image)))
 
         elif event == ev.BLOG_ENTRY_CREATE:
             entry = ev.parse_blog_entry(payload)

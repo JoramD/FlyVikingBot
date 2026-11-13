@@ -25,19 +25,28 @@ def make_cog(tmp_path, **env):
     return WebsiteEvents(bot), channels
 
 
-async def test_gallery_uploads_image_as_attachment(tmp_path):
+async def test_gallery_uploads_the_original_image(tmp_path):
     cog, ch = make_cog(tmp_path)
     cog._fetch_image = AsyncMock(return_value=b"\x89PNG fake")
     await cog.handle(ev.GALLERY_IMAGE_CREATE, load_fixture("real_galleryImage_create"))
-    cog._fetch_image.assert_awaited_once()
-    assert "/large.Screenshot" in cog._fetch_image.await_args.args[0]
+    cog._fetch_image.assert_awaited_once()  # the original fitted, so the large version isn't needed
+    assert "/monthly_2026_11/Screenshot" in cog._fetch_image.await_args.args[0]
     call = ch[200].send.await_args
     file = call.kwargs["file"]
-    assert file.filename.startswith("large.Screenshot") and file.filename.endswith(".png")
+    assert file.filename.startswith("Screenshot") and file.filename.endswith(".png")
     # Author line with the profile link wrapped in <> so Discord doesn't add a preview
     assert call.kwargs["content"] == "Uploaded by [Alexhs2](<https://flyviking.net/profile/3-alexhs2/>)"
     assert call.kwargs["allowed_mentions"].everyone is False
     ch[100].send.assert_not_awaited()
+
+
+async def test_gallery_uses_large_version_when_original_is_too_big(tmp_path):
+    cog, ch = make_cog(tmp_path)
+    cog._fetch_image = AsyncMock(side_effect=[None, b"\x89PNG large"])  # original over the limit, large fits
+    await cog.handle(ev.GALLERY_IMAGE_CREATE, load_fixture("real_galleryImage_create"))
+    urls = [c.args[0] for c in cog._fetch_image.await_args_list]
+    assert "/monthly_2026_11/Screenshot" in urls[0] and "/large.Screenshot" in urls[1]
+    assert ch[200].send.await_args.kwargs["file"].filename.startswith("large.Screenshot")
 
 
 async def test_gallery_falls_back_to_link_when_download_fails(tmp_path):
