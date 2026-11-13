@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -58,13 +59,64 @@ async def test_gallery_without_author_posts_image_only(tmp_path):
     assert ch[200].send.await_args.kwargs["content"] is None
 
 
+STREAMED_IMAGE = bytes(range(256)) * 4096  # 1 MiB, arriving in many network chunks like a real download
+
+
+async def _streamed(request: web.Request, body: bytes) -> web.StreamResponse:
+    """Send the body in 64 KiB pieces without a Content-Length (chunked transfer), pausing in between,
+    so the client sees it arrive in parts."""
+    response = web.StreamResponse(headers={"Content-Type": "image/png"})
+    await response.prepare(request)
+    for i in range(0, len(body), 64 * 1024):
+        await response.write(body[i : i + 64 * 1024])
+        await asyncio.sleep(0.001)
+    await response.write_eof()
+    return response
+
+
 @pytest.fixture
 async def image_server():
+    async def ok(request):
+        return web.Response(body=b"img", content_type="image/png")
+
+    async def big(request):
+        return web.Response(body=b"x" * 64, content_type="image/png")
+
+    async def streamed(request):
+        return await _streamed(request, STREAMED_IMAGE)
+
+    async def moved(request):
+        raise web.HTTPFound("http://169.254.169.254/latest/meta-data")
+
     app = web.Application()
-    app.router.add_get("/ok.png", lambda r: web.Response(body=b"img", content_type="image/png"))
-    app.router.add_get("/big.png", lambda r: web.Response(body=b"x" * 64, content_type="image/png"))
+    for path, handler in (("/ok.png", ok), ("/big.png", big), ("/streamed.png", streamed), ("/moved.png", moved)):
+        app.router.add_get(path, handler)
     async with TestClient(TestServer(app)) as client, aiohttp.ClientSession() as session:
         yield session, str(client.make_url(""))
+
+
+async def test_fetch_image_reads_the_whole_streamed_file(tmp_path, image_server):
+    """Regression: the bot uploaded only the first network chunk, so gallery posts showed a thin strip."""
+    session, base = image_server
+    cog, _ = make_cog(tmp_path, WEBSITE_BASE_URL=f"{base}/api/index.php")
+    cog.bot.http_session = session
+    assert await cog._fetch_image(f"{base}/streamed.png") == STREAMED_IMAGE
+
+
+async def test_fetch_image_size_limit_without_content_length(tmp_path, image_server, monkeypatch):
+    session, base = image_server
+    cog, _ = make_cog(tmp_path, WEBSITE_BASE_URL=f"{base}/api/index.php")
+    cog.bot.http_session = session
+    monkeypatch.setattr(website_events, "MAX_UPLOAD_BYTES", 100 * 1024)
+    assert await cog._fetch_image(f"{base}/streamed.png") is None  # chunked, so only the running total can tell
+
+
+async def test_fetch_image_does_not_follow_redirects(tmp_path, image_server):
+    """The host check only sees the first URL; a redirect could point the download anywhere."""
+    session, base = image_server
+    cog, _ = make_cog(tmp_path, WEBSITE_BASE_URL=f"{base}/api/index.php")
+    cog.bot.http_session = session
+    assert await cog._fetch_image(f"{base}/moved.png") is None  # falls back to posting the link
 
 
 async def test_fetch_image_against_server(tmp_path, image_server, monkeypatch):

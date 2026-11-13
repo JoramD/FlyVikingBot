@@ -167,18 +167,23 @@ class WebsiteEvents(commands.Cog):
             log.warning("Not downloading image from outside the website: %s", url)
             return None
         try:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+            # No redirects: the host check above only covers this URL, not where a redirect would lead
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=30), allow_redirects=False) as resp:
                 if resp.status != 200:
                     log.warning("Image download returned HTTP %s: %s", resp.status, url)
                     return None
                 if (resp.content_length or 0) > MAX_UPLOAD_BYTES:
                     log.info("Image too large to upload (%s bytes), posting link: %s", resp.content_length, url)
                     return None
-                data = await resp.content.read(MAX_UPLOAD_BYTES + 1)
-                if len(data) > MAX_UPLOAD_BYTES:
-                    log.info("Image too large to upload, posting link: %s", url)
-                    return None
-                return data
+                # Read every chunk: content.read(n) returns as soon as *some* data has arrived, which
+                # uploaded only the top strip of the image
+                data = bytearray()
+                async for chunk in resp.content.iter_chunked(64 * 1024):
+                    data += chunk
+                    if len(data) > MAX_UPLOAD_BYTES:
+                        log.info("Image too large to upload, posting link: %s", url)
+                        return None
+                return bytes(data)
         except (aiohttp.ClientError, TimeoutError) as exc:
             log.warning("Image download failed (%s): %s", type(exc).__name__, url)
             return None
