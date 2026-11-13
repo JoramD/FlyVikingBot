@@ -16,12 +16,12 @@ from discord.ext import commands, tasks
 
 from .. import linking as lk
 from ..constants import BRAND_COLOUR
-from ..interactions import fit_lines, reply_ephemeral
+from ..interactions import FSA_UNREACHABLE, fit_lines, reply_ephemeral
 from ..services.fsairlines import FsaNotFound, Pilot
 from ..services.http import ServiceError
 from ..services.website import member_group_ids
 from ..storage import Link
-from ..system_messages import is_staff
+from ..system_messages import STAFF_ONLY_MESSAGE, is_staff, staff_only
 from ..webhooks import ips_events as ev
 from .flight_logs import flight_title, format_hours
 
@@ -68,7 +68,7 @@ class ReviewButton(discord.ui.DynamicItem[discord.ui.Button], template=REVIEW_TE
     async def callback(self, interaction: discord.Interaction) -> None:
         cog = interaction.client.get_cog("Pilots")
         if cog is None:
-            await interaction.response.send_message("Linking is currently disabled.", ephemeral=True)
+            await interaction.response.send_message(":x: ERROR: Linking is currently disabled.", ephemeral=True)
             return
         await cog.handle_review(interaction, self.action, self.ips_member_id)
 
@@ -369,7 +369,7 @@ class Pilots(commands.Cog):
 
     async def handle_review(self, interaction: discord.Interaction, action: str, ips_member_id: int) -> None:
         if not is_staff(interaction.user, self.settings.system_messages_role_id):
-            await interaction.response.send_message("Only staff can do this.", ephemeral=True)
+            await interaction.response.send_message(STAFF_ONLY_MESSAGE, ephemeral=True)
             return
         key = REVIEW_KEY.format(ips_member_id)
         raw = await self.bot.storage.kv_get(key)
@@ -486,7 +486,36 @@ class Pilots(commands.Cog):
             label = member.mention if member else f"website member {ips_member_id}"
             if change := await self.set_website_groups(ips_member_id, rank_id, clear=clear, label=label):
                 changes.append(change)
+            if change := await self.set_website_rank_field(ips_member_id, rank_id, clear=clear, label=label):
+                changes.append(change)
         return "; ".join(changes) or None
+
+    async def set_website_rank_field(
+        self, ips_member_id: int, rank_id: int | None, *, clear: bool = False, label: str = ""
+    ) -> str | None:
+        """Write the full FSA rank name (Board ranks included; it's display only) into the read-only
+        profile field IPS_FIELD_FSA_RANK, so it shows on the member's website profile. Cleared on unlink."""
+        field_id = self.settings.ips_field_fsa_rank
+        if not field_id or (rank_id is None and not clear):
+            return None  # off, or FSA gave no rank: don't blank the field on incomplete data
+        value = "" if clear else await self.rank_name(rank_id)
+        if value is None:
+            return None  # rank list unavailable or unknown rank: try again next sync
+        try:
+            current = ev.custom_field(await self.bot.website.get_member(ips_member_id), field_id) or ""
+            if current != value:
+                await self.bot.website.update_member_field(ips_member_id, field_id, value)
+        except ServiceError as exc:
+            await self.report_once(
+                "website-rank-field",
+                f"⚠️ Couldn't update the website rank profile field ({exc}). Check that IPS_FIELD_FSA_RANK is the "
+                "right field ID and that the website API key may use GET + POST /core/members/{id}.",
+            )
+            return None
+        await self.resolved("website-rank-field")
+        if current == value:
+            return None
+        return f"{label} (website rank field): {current or 'empty'} → {value or 'empty'}"
 
     async def website_group_map(self) -> tuple[dict[int, int | None], set[int]]:
         """Like rank_role_map, for website member groups (cached for an hour)."""
@@ -693,13 +722,12 @@ class Pilots(commands.Cog):
 
     @app_commands.command(name="sync_rank", description="Update rank roles and website rank groups from FSAirlines now")
     @app_commands.describe(member="Only sync this member (default: everyone linked)")
-    @app_commands.default_permissions(manage_roles=True)
-    @app_commands.guild_only()
+    @staff_only()
     async def sync_rank(self, interaction: discord.Interaction, member: discord.Member | None = None) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
         if not self.rank_roles_enabled:
             await reply_ephemeral(
-                interaction, ":x: Rank roles are switched off (FSA_RANK_ROLES is empty).", delete_after=None
+                interaction, ":x: ERROR: Rank roles are switched off (FSA_RANK_ROLES is empty).", delete_after=None
             )
             return
         try:
@@ -719,7 +747,7 @@ class Pilots(commands.Cog):
                 return
             link, note = await self.ensure_link(member)
             if link is None:
-                msg = f":x: {member.mention} isn't linked to an FSAirlines pilot."
+                msg = f":x: ERROR: {member.mention} isn't linked to an FSAirlines pilot."
                 if note:
                     msg += " Their website profile was found, but it's waiting for staff review in #system-messages."
                 await reply_ephemeral(interaction, msg, delete_after=None)
@@ -761,7 +789,9 @@ class Pilots(commands.Cog):
         pilot: app_commands.Range[str, 1, 40] | None = None,
     ) -> None:
         if member and pilot:
-            await interaction.response.send_message("Use either `member` or `pilot`, not both.", ephemeral=True)
+            await reply_ephemeral(
+                interaction, ":x: ERROR: Use either `member` or `pilot`, not both.", delete_after=None
+            )
             return
 
         await interaction.response.defer(thinking=True)
@@ -771,18 +801,18 @@ class Pilots(commands.Cog):
             link, note = await self.ensure_link(target)
             if link is None:
                 if member:
-                    msg = f"{member.mention} hasn't linked an FSAirlines pilot."
+                    msg = f":x: ERROR: {member.mention} hasn't linked an FSAirlines pilot."
                 else:
                     msg = (
-                        "You haven't linked your FSAirlines pilot yet. On your "
+                        ":x: ERROR: You haven't linked your FSAirlines pilot yet. On your "
                         f"[flyviking.net profile](<{self.settings.website_root}>), fill in your "
                         "**FSAirlines Pilot ID** (or callsign) and **Discord username**; the bot links you "
                         "automatically."
                     )
                 if note and not member:  # review details are only shown to the member themselves
-                    msg = note
+                    msg = f":x: ERROR: {note}"
                 await interaction.delete_original_response()
-                await interaction.followup.send(msg, ephemeral=True)
+                await reply_ephemeral(interaction, msg, delete_after=None)
                 return
             fsa_id, mention = link.external_id, f"<@{link.discord_id}>"
 
@@ -796,12 +826,14 @@ class Pilots(commands.Cog):
             data = await self.bot.fsa.pilot(fsa_id)
         except FsaNotFound:
             await interaction.delete_original_response()
-            await interaction.followup.send(f":x: FSAirlines pilot `{pilot or fsa_id}` not found.", ephemeral=True)
+            await reply_ephemeral(
+                interaction, f":x: ERROR: FSAirlines pilot {lk.code(pilot or fsa_id)} not found.", delete_after=None
+            )
             return
         except ServiceError as exc:
             log.error("Could not retrieve pilot %s: %s", pilot or fsa_id, exc)
             await interaction.delete_original_response()
-            await interaction.followup.send(":x: ERROR: Could not reach FSAirlines. Try again later.", ephemeral=True)
+            await reply_ephemeral(interaction, FSA_UNREACHABLE, delete_after=None)
             return
         try:
             flights = await self.bot.fsa.flight_logs(count=1, pilot_id=fsa_id)

@@ -8,6 +8,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+MIN_WEBHOOK_SECRET_LENGTH = 16  # the secret is part of the webhook URL; too short is guessable
+
 
 class ConfigError(RuntimeError):
     """A setting is missing or invalid; the bot exits with a readable message."""
@@ -42,12 +44,18 @@ class Settings:
     system_messages_role_id: int | None  # pinged on #system-messages posts that need staff action
     ips_field_fsa_pilot_id: int | None
     ips_field_discord_name: int | None
+    ips_field_fsa_rank: int | None  # read-only profile field the bot fills with the FSA rank; unset = off
     fsa_poll_seconds: int
     fsa_rank_sync_minutes: int
     fsa_rank_roles: tuple[str, ...]  # the only Discord roles / website groups managed for FSA ranks; empty = off
     website_rank_sync: bool  # also mirror ranks to website groups (needs member-edit API permission)
     website_member_group: str  # primary group for pilots on an automatic rank
     website_protected_groups: tuple[str, ...]  # primary groups the bot never changes
+
+    # SayIntentions.AI (/weather is off unless both the app key and the account key are set)
+    sayintentions_app_key: str | None  # identifies this bot as an application (sent as X-Developer-Key)
+    sayintentions_account_key: str | None  # identifies the SayIntentions account the bot uses (sent as api_key)
+    sayintentions_va_key: str | None  # FlyViking's VA-Link key; reserved for crew personas (not used yet)
 
     data_dir: Path
 
@@ -94,6 +102,13 @@ def load_settings(
     def int_with_default(name: str, default: str) -> int:
         return to_int(name, get(name, default))
 
+    webhook_secret = require("WEBHOOK_SECRET")
+    if len(webhook_secret) < MIN_WEBHOOK_SECRET_LENGTH:
+        raise ConfigError(
+            f"WEBHOOK_SECRET must be at least {MIN_WEBHOOK_SECRET_LENGTH} characters; generate one with "
+            '`python -c "import secrets;print(secrets.token_urlsafe(32))"`'
+        )
+
     return Settings(
         discord_token=require("DISCORD_TOKEN"),
         fsa_api_key=require("FSA_API_KEY"),
@@ -105,7 +120,7 @@ def load_settings(
         channel_announcements=optional_int("CHANNEL_ANNOUNCEMENTS"),
         channel_screenshots=optional_int("CHANNEL_SCREENSHOTS"),
         channel_bot_development=optional_int("CHANNEL_BOT_DEVELOPMENT"),
-        webhook_secret=require("WEBHOOK_SECRET"),
+        webhook_secret=webhook_secret,
         webhook_bind=get("WEBHOOK_BIND", "0.0.0.0"),
         webhook_port=int_with_default("WEBHOOK_PORT", "8080"),
         webhook_capture=_bool(get("WEBHOOK_CAPTURE", "false")),
@@ -116,6 +131,7 @@ def load_settings(
         system_messages_role_id=optional_int("SYSTEM_MESSAGES_ROLE_ID"),
         ips_field_fsa_pilot_id=optional_int("IPS_FIELD_FSA_PILOT_ID"),
         ips_field_discord_name=optional_int("IPS_FIELD_DISCORD_NAME"),
+        ips_field_fsa_rank=optional_int("IPS_FIELD_FSA_RANK"),
         fsa_poll_seconds=max(60, int_with_default("FSA_POLL_SECONDS", "120")),
         fsa_rank_sync_minutes=max(5, int_with_default("FSA_RANK_SYNC_MINUTES", "60")),
         website_rank_sync=_bool(get("WEBSITE_RANK_SYNC", "true")),
@@ -127,5 +143,8 @@ def load_settings(
         fsa_rank_roles=tuple(
             name.strip() for name in (get("FSA_RANK_ROLES") or "").split(",") if name.strip()
         ),
+        sayintentions_app_key=get("SAYINTENTIONS_APP_KEY"),
+        sayintentions_account_key=get("SAYINTENTIONS_ACCOUNT_KEY"),
+        sayintentions_va_key=get("SAYINTENTIONS_VA_KEY"),
         data_dir=Path(get("DATA_DIR", "data")),
     )

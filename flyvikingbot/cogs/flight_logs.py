@@ -9,6 +9,7 @@ import discord
 from discord.ext import commands, tasks
 
 from ..constants import BRAND_COLOUR
+from ..linking import SERVICE_FSA
 from ..services.fsairlines import FlightLog
 from ..services.http import ServiceError
 
@@ -121,7 +122,7 @@ class FlightLogs(commands.Cog):
                 log.info("No detail for flight %s (%s); posting summary", flight.id, exc)
 
             mention = None
-            if flight.pilot_id and (link := await storage.link_by_external("fsa", flight.pilot_id)):
+            if flight.pilot_id and (link := await storage.link_by_external(SERVICE_FSA, flight.pilot_id)):
                 mention = f"<@{link.discord_id}>"
 
             # Raises on failure, so the stored ID isn't advanced and the flight is retried next cycle

@@ -9,6 +9,8 @@ def test_gallery_image_prefers_large():
     image = ev.parse_gallery_image(load_fixture("real_galleryImage_create"))
     assert "/large.Screenshot" in image.image_url
     assert image.url == "https://flyviking.net/gallery/image/375-screenshot-2026-11-10-113646png/"
+    assert image.author.member_id == 3
+    assert image.original_url.startswith("https://flyviking.net/uploads/monthly_2026_11/Screenshot2026-11-10113646.png.")
 
 
 def test_gallery_image_falls_back_to_original():

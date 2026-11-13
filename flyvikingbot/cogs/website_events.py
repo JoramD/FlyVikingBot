@@ -87,11 +87,14 @@ def file_embed(file: ev.DownloadsFile, *, new_version: bool) -> discord.Embed:
     return embed
 
 
-def author_line(author: ev.Author | None) -> str | None:
-    """'Uploaded by <name>' with the profile linked. The <> stops Discord previewing the link, so the
-    uploaded image stays full size."""
+def author_line(author: ev.Author | None, mention: str | None = None) -> str | None:
+    """'Uploaded by @member' when the author is linked to a Discord member (mentions never ping these
+    posts), otherwise their website name linked to their profile. The <> stops Discord previewing the
+    link, so the uploaded image stays full size."""
     if author is None:
         return None
+    if mention:
+        return f"Uploaded by {mention}"
     name = discord.utils.escape_markdown(author.name)
     return f"Uploaded by [{name}](<{author.profile_url}>)" if author.profile_url else f"Uploaded by {name}"
 
@@ -122,19 +125,26 @@ def announcement_message(entry: ev.BlogEntry) -> dict[str, Any]:
     }
 
 
-def file_message(file: ev.DownloadsFile, *, new_version: bool) -> dict[str, Any]:
+def file_message(file: ev.DownloadsFile, *, new_version: bool, mention: str | None = None) -> dict[str, Any]:
+    """`mention` is the author's Discord mention when they're linked; it goes in the text because the
+    embed's author header can't show mentions (that keeps the website name, avatar and profile link)."""
+    text = "New version available" if new_version else "New file available"
     return {
-        "content": "New version available" if new_version else "New file available",
+        "content": f"{text} · by {mention}" if mention else text,
         "embed": file_embed(file, new_version=new_version),
         "allowed_mentions": NO_MENTIONS,
     }
 
 
-def gallery_message(image: ev.GalleryImage, data: bytes | None) -> dict[str, Any]:
-    """The uploaded image with an author line, or the image link if it couldn't be downloaded."""
-    line = author_line(image.author)
+def gallery_message(
+    image: ev.GalleryImage, data: bytes | None, source_url: str | None = None, mention: str | None = None
+) -> dict[str, Any]:
+    """The uploaded image with an author line, or the image link if it couldn't be downloaded.
+    `source_url` is the version `data` came from (original or large), for the file name; `mention` is
+    the author's Discord mention when they're linked."""
+    line = author_line(image.author, mention)
     if data:
-        file = discord.File(io.BytesIO(data), filename=_filename(image.image_url))
+        file = discord.File(io.BytesIO(data), filename=_filename(source_url or image.image_url))
         return {"content": line, "file": file, "allowed_mentions": NO_MENTIONS}
     return {"content": f"{line}\n{image.image_url}" if line else image.image_url, "allowed_mentions": NO_MENTIONS}
 
@@ -167,21 +177,43 @@ class WebsiteEvents(commands.Cog):
             log.warning("Not downloading image from outside the website: %s", url)
             return None
         try:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+            # No redirects: the host check above only covers this URL, not where a redirect would lead
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=30), allow_redirects=False) as resp:
                 if resp.status != 200:
                     log.warning("Image download returned HTTP %s: %s", resp.status, url)
                     return None
                 if (resp.content_length or 0) > MAX_UPLOAD_BYTES:
-                    log.info("Image too large to upload (%s bytes), posting link: %s", resp.content_length, url)
+                    log.info("Image too large to upload (%s bytes): %s", resp.content_length, url)
                     return None
-                data = await resp.content.read(MAX_UPLOAD_BYTES + 1)
-                if len(data) > MAX_UPLOAD_BYTES:
-                    log.info("Image too large to upload, posting link: %s", url)
-                    return None
-                return data
+                # Read every chunk: content.read(n) returns as soon as *some* data has arrived, which
+                # uploaded only the top strip of the image
+                data = bytearray()
+                async for chunk in resp.content.iter_chunked(64 * 1024):
+                    data += chunk
+                    if len(data) > MAX_UPLOAD_BYTES:
+                        log.info("Image too large to upload: %s", url)
+                        return None
+                return bytes(data)
         except (aiohttp.ClientError, TimeoutError) as exc:
             log.warning("Image download failed (%s): %s", type(exc).__name__, url)
             return None
+
+    async def author_mention(self, author: ev.Author | None) -> str | None:
+        """The author's Discord mention if their website account is linked and they're in the server."""
+        storage = getattr(self.bot, "storage", None)
+        if author is None or author.member_id is None or storage is None:
+            return None
+        discord_id = await storage.discord_id_for_ips_member(author.member_id)
+        guild = self.bot.primary_guild() if discord_id else None
+        return f"<@{discord_id}>" if guild and guild.get_member(discord_id) else None
+
+    async def _fetch_gallery_image(self, image: ev.GalleryImage) -> tuple[bytes | None, str | None]:
+        """The best version that fits Discord's upload limit: the original upload, else IPS's resized
+        "large" version. Returns (data, the URL it came from), or (None, None) to fall back to the link."""
+        for url in dict.fromkeys(u for u in (image.original_url, image.image_url) if u):
+            if data := await self._fetch_image(url):
+                return data, url
+        return None, None
 
     @commands.Cog.listener()
     async def on_ips_webhook(self, event: str, payload: Any) -> None:
@@ -199,14 +231,20 @@ class WebsiteEvents(commands.Cog):
             channel = await self._channel(self.settings.channel_screenshots, "CHANNEL_SCREENSHOTS") if image else None
             if image and channel:
                 # Upload the image ourselves: Discord can't always unfurl flyviking.net links
-                await channel.send(**gallery_message(image, await self._fetch_image(image.image_url)))
+                data, source = await self._fetch_gallery_image(image)
+                mention = await self.author_mention(image.author)
+                await channel.send(**gallery_message(image, data, source, mention))
 
         elif event == ev.BLOG_ENTRY_CREATE:
             entry = ev.parse_blog_entry(payload)
             if not entry:
                 return
             wanted = self.settings.announcement_blog_id
-            if wanted is not None and entry.blog_id != wanted:
+            if wanted is None:
+                # Off until set: otherwise members' own blogs would ping @everyone
+                log.info("ANNOUNCEMENT_BLOG_ID not set; not posting blog entry %r", entry.title)
+                return
+            if entry.blog_id != wanted:
                 log.info("Ignoring blog entry %r from blog %s", entry.title, entry.blog_id)
                 return
             channel = await self._channel(self.settings.channel_announcements, "CHANNEL_ANNOUNCEMENTS")
@@ -220,7 +258,8 @@ class WebsiteEvents(commands.Cog):
                 channel := await self._channel(self.settings.channel_announcements, "CHANNEL_ANNOUNCEMENTS")
             ):
                 file = await with_category_path(getattr(self.bot, "website", None), file)
-                await channel.send(**file_message(file, new_version=new_version))
+                mention = await self.author_mention(file.author)
+                await channel.send(**file_message(file, new_version=new_version, mention=mention))
 
         elif event not in ev.MEMBER_EVENTS:  # member events are handled by the pilots cog
             log.info("Ignoring unhandled webhook event %s", event)

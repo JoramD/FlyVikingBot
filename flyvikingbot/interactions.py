@@ -12,6 +12,9 @@ MESSAGE_LIMIT = 2000  # Discord's maximum message length
 # so the user has time to read them
 EPHEMERAL_SECONDS = 10.0
 
+# Shared error texts, so every command words the same failure the same way
+FSA_UNREACHABLE = ":x: ERROR: Could not reach FSAirlines. Try again later."
+
 
 async def reply_ephemeral(
     interaction: discord.Interaction, content: str | None = None, *, delete_after: float | None = EPHEMERAL_SECONDS,

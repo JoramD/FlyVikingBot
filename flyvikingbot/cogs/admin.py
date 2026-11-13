@@ -1,4 +1,4 @@
-"""Staff utilities: /clear (administrators only)."""
+"""Staff utilities: /clear (staff only)."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from ..interactions import reply_ephemeral
+from ..system_messages import staff_only
 
 if TYPE_CHECKING:
     from ..bot import FlyVikingBot
@@ -34,7 +35,7 @@ def clear_summary(count: int, minutes: int | None) -> str:
 
 
 class Admin(commands.Cog):
-    """Administrator-only commands (Discord hides them from everyone else)."""
+    """Staff-only commands (Discord hides them from everyone else, and the bot checks again)."""
     def __init__(self, bot: FlyVikingBot) -> None:
         self.bot = bot
 
@@ -43,8 +44,7 @@ class Admin(commands.Cog):
         amount="How many messages to delete (1-50)",
         minutes="Only delete messages from the last N minutes (1-1440)",
     )
-    @app_commands.default_permissions(administrator=True)
-    @app_commands.guild_only()
+    @staff_only()
     async def clear(
         self,
         interaction: discord.Interaction,
@@ -52,7 +52,7 @@ class Admin(commands.Cog):
         minutes: app_commands.Range[int, 1, 1440] | None = None,
     ) -> None:
         if amount is None and minutes is None:
-            await reply_ephemeral(interaction, ":x: Give an amount, minutes, or both.", delete_after=None)
+            await reply_ephemeral(interaction, ":x: ERROR: Give an amount, minutes, or both.", delete_after=None)
             return
         await interaction.response.defer(ephemeral=True, thinking=True)
         channel = interaction.channel

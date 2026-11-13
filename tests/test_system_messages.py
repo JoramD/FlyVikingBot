@@ -103,3 +103,43 @@ async def test_completed_button_staff_only(tmp_path):
 def test_ping_role_unset_means_no_ping(tmp_path):
     settings = load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path)})
     assert settings.system_messages_role_id is None  # no hard-coded default; comes from .env
+
+
+# --- staff-only slash commands ---------------------------------------------------------------------------
+
+import discord  # noqa: E402
+import pytest  # noqa: E402
+from discord import app_commands  # noqa: E402
+
+from flyvikingbot.cogs.admin import Admin  # noqa: E402
+from flyvikingbot.cogs.pilots import Pilots  # noqa: E402
+from flyvikingbot.system_messages import STAFF_ONLY_MESSAGE  # noqa: E402
+
+STAFF_COMMANDS = [Admin.clear, Pilots.sync_rank]
+
+
+@pytest.mark.parametrize("command", STAFF_COMMANDS, ids=lambda c: c.name)
+def test_staff_commands_share_one_rule(command):
+    """Hidden by Discord for everyone without Manage Roles (admins have it), server only, checked again by the bot."""
+    assert command.default_permissions == discord.Permissions(manage_roles=True)
+    assert command.guild_only and len(command.checks) == 1
+
+
+@pytest.mark.parametrize("command", STAFF_COMMANDS, ids=lambda c: c.name)
+@pytest.mark.parametrize(
+    ("user", "allowed"),
+    [(staff_member(manage_roles=True), True), (staff_member(role_ids=[BOARD]), True),
+     (SimpleNamespace(guild_permissions=SimpleNamespace(manage_roles=False, administrator=True), roles=[]), True),
+     (staff_member(role_ids=[1]), False)],
+)
+def test_staff_check_runs_even_if_discord_overrides_are_loosened(command, user, allowed, tmp_path):
+    bot, _ = fake_bot(tmp_path)
+    interaction = SimpleNamespace(client=bot, user=user)
+    assert command.checks[0](interaction) is allowed
+
+
+async def test_refused_staff_command_gets_a_visible_error(tmp_path):
+    interaction = SimpleNamespace(response=SimpleNamespace(is_done=MagicMock(return_value=False),
+                                                           send_message=AsyncMock()))
+    await FlyVikingBot.on_app_command_error(None, interaction, app_commands.CheckFailure())
+    interaction.response.send_message.assert_awaited_once_with(STAFF_ONLY_MESSAGE, ephemeral=True, delete_after=None)

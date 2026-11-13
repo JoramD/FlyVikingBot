@@ -10,6 +10,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from ..constants import BRAND_COLOUR, EMOJI_FLYVIKING_V
+from ..interactions import FSA_UNREACHABLE, reply_ephemeral
 from ..services.http import ServiceError
 
 if TYPE_CHECKING:
@@ -50,7 +51,9 @@ class Airline(commands.Cog):
     def __init__(self, bot: FlyVikingBot) -> None:
         self.bot = bot
 
-    @app_commands.command(name="airline_statistics", description="Gets various airline statistics from FSAirlines")
+    @app_commands.command(
+        name="airline_statistics", description="Show FlyViking's airline-wide statistics from FSAirlines"
+    )
     async def airline_statistics(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(thinking=True)
         try:
@@ -58,9 +61,7 @@ class Airline(commands.Cog):
         except ServiceError as exc:
             log.error("Could not retrieve data from FSAirlines: %s", exc)
             await interaction.delete_original_response()
-            await interaction.followup.send(
-                ":x: ERROR: Could not reach FSAirlines. Try again later.", ephemeral=True
-            )
+            await reply_ephemeral(interaction, FSA_UNREACHABLE, delete_after=None)
             return
         await interaction.followup.send(embed=stats_embed(data))
 

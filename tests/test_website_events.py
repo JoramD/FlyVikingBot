@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -24,19 +25,28 @@ def make_cog(tmp_path, **env):
     return WebsiteEvents(bot), channels
 
 
-async def test_gallery_uploads_image_as_attachment(tmp_path):
+async def test_gallery_uploads_the_original_image(tmp_path):
     cog, ch = make_cog(tmp_path)
     cog._fetch_image = AsyncMock(return_value=b"\x89PNG fake")
     await cog.handle(ev.GALLERY_IMAGE_CREATE, load_fixture("real_galleryImage_create"))
-    cog._fetch_image.assert_awaited_once()
-    assert "/large.Screenshot" in cog._fetch_image.await_args.args[0]
+    cog._fetch_image.assert_awaited_once()  # the original fitted, so the large version isn't needed
+    assert "/monthly_2026_11/Screenshot" in cog._fetch_image.await_args.args[0]
     call = ch[200].send.await_args
     file = call.kwargs["file"]
-    assert file.filename.startswith("large.Screenshot") and file.filename.endswith(".png")
+    assert file.filename.startswith("Screenshot") and file.filename.endswith(".png")
     # Author line with the profile link wrapped in <> so Discord doesn't add a preview
     assert call.kwargs["content"] == "Uploaded by [Alexhs2](<https://flyviking.net/profile/3-alexhs2/>)"
     assert call.kwargs["allowed_mentions"].everyone is False
     ch[100].send.assert_not_awaited()
+
+
+async def test_gallery_uses_large_version_when_original_is_too_big(tmp_path):
+    cog, ch = make_cog(tmp_path)
+    cog._fetch_image = AsyncMock(side_effect=[None, b"\x89PNG large"])  # original over the limit, large fits
+    await cog.handle(ev.GALLERY_IMAGE_CREATE, load_fixture("real_galleryImage_create"))
+    urls = [c.args[0] for c in cog._fetch_image.await_args_list]
+    assert "/monthly_2026_11/Screenshot" in urls[0] and "/large.Screenshot" in urls[1]
+    assert ch[200].send.await_args.kwargs["file"].filename.startswith("large.Screenshot")
 
 
 async def test_gallery_falls_back_to_link_when_download_fails(tmp_path):
@@ -58,13 +68,64 @@ async def test_gallery_without_author_posts_image_only(tmp_path):
     assert ch[200].send.await_args.kwargs["content"] is None
 
 
+STREAMED_IMAGE = bytes(range(256)) * 4096  # 1 MiB, arriving in many network chunks like a real download
+
+
+async def _streamed(request: web.Request, body: bytes) -> web.StreamResponse:
+    """Send the body in 64 KiB pieces without a Content-Length (chunked transfer), pausing in between,
+    so the client sees it arrive in parts."""
+    response = web.StreamResponse(headers={"Content-Type": "image/png"})
+    await response.prepare(request)
+    for i in range(0, len(body), 64 * 1024):
+        await response.write(body[i : i + 64 * 1024])
+        await asyncio.sleep(0.001)
+    await response.write_eof()
+    return response
+
+
 @pytest.fixture
 async def image_server():
+    async def ok(request):
+        return web.Response(body=b"img", content_type="image/png")
+
+    async def big(request):
+        return web.Response(body=b"x" * 64, content_type="image/png")
+
+    async def streamed(request):
+        return await _streamed(request, STREAMED_IMAGE)
+
+    async def moved(request):
+        raise web.HTTPFound("http://169.254.169.254/latest/meta-data")
+
     app = web.Application()
-    app.router.add_get("/ok.png", lambda r: web.Response(body=b"img", content_type="image/png"))
-    app.router.add_get("/big.png", lambda r: web.Response(body=b"x" * 64, content_type="image/png"))
+    for path, handler in (("/ok.png", ok), ("/big.png", big), ("/streamed.png", streamed), ("/moved.png", moved)):
+        app.router.add_get(path, handler)
     async with TestClient(TestServer(app)) as client, aiohttp.ClientSession() as session:
         yield session, str(client.make_url(""))
+
+
+async def test_fetch_image_reads_the_whole_streamed_file(tmp_path, image_server):
+    """Regression: the bot uploaded only the first network chunk, so gallery posts showed a thin strip."""
+    session, base = image_server
+    cog, _ = make_cog(tmp_path, WEBSITE_BASE_URL=f"{base}/api/index.php")
+    cog.bot.http_session = session
+    assert await cog._fetch_image(f"{base}/streamed.png") == STREAMED_IMAGE
+
+
+async def test_fetch_image_size_limit_without_content_length(tmp_path, image_server, monkeypatch):
+    session, base = image_server
+    cog, _ = make_cog(tmp_path, WEBSITE_BASE_URL=f"{base}/api/index.php")
+    cog.bot.http_session = session
+    monkeypatch.setattr(website_events, "MAX_UPLOAD_BYTES", 100 * 1024)
+    assert await cog._fetch_image(f"{base}/streamed.png") is None  # chunked, so only the running total can tell
+
+
+async def test_fetch_image_does_not_follow_redirects(tmp_path, image_server):
+    """The host check only sees the first URL; a redirect could point the download anywhere."""
+    session, base = image_server
+    cog, _ = make_cog(tmp_path, WEBSITE_BASE_URL=f"{base}/api/index.php")
+    cog.bot.http_session = session
+    assert await cog._fetch_image(f"{base}/moved.png") is None  # falls back to posting the link
 
 
 async def test_fetch_image_against_server(tmp_path, image_server, monkeypatch):
@@ -147,6 +208,13 @@ async def test_blog_entry_other_blog_ignored(tmp_path):
     ch[100].send.assert_not_awaited()
 
 
+async def test_blog_entries_off_without_announcement_blog(tmp_path):
+    """No ANNOUNCEMENT_BLOG_ID: nothing is posted, so members' own blogs can't ping @everyone."""
+    cog, ch = make_cog(tmp_path, ANNOUNCEMENT_BLOG_ID="")
+    await cog.handle(ev.BLOG_ENTRY_CREATE, load_fixture("real_blogEntry_create"))
+    ch[100].send.assert_not_awaited()
+
+
 async def test_unknown_and_malformed_events_do_nothing(tmp_path):
     cog, ch = make_cog(tmp_path)
     await cog.on_ips_webhook("member_create", {"id": 1})
@@ -186,3 +254,49 @@ async def test_new_file_post_shows_full_category_path(tmp_path):
         5: ("Add-ons", None), 6: ("GSX Configurations", 5)}))
     await cog.handle(ev.DOWNLOADS_FILE_CREATE, load_fixture("real_downloadsFile_create"))
     assert ch[100].send.await_args.kwargs["embed"].footer.text == "Add-ons › GSX Configurations · flyviking.net"
+
+
+@pytest.mark.parametrize(
+    ("linked", "in_server", "content"),
+    [
+        (True, True, "Uploaded by <@77>"),  # linked: their Discord account (shown, never pinged)
+        (True, False, "Uploaded by [Alexhs2](<https://flyviking.net/profile/3-alexhs2/>)"),  # left the server
+        (False, True, "Uploaded by [Alexhs2](<https://flyviking.net/profile/3-alexhs2/>)"),  # not linked
+    ],
+)
+async def test_gallery_uploader_shown_as_discord_member_when_linked(tmp_path, linked, in_server, content):
+    from flyvikingbot.storage import Storage
+
+    cog, ch = make_cog(tmp_path)
+    cog.bot.storage = Storage(tmp_path / "db.sqlite")
+    await cog.bot.storage.init()
+    if linked:  # website member 3 (the fixture's author) is linked to Discord user 77
+        await cog.bot.storage.save_link(discord_id=77, ips_member_id=3, ips_profile_url=None, discord_name="alex",
+                                        service="fsa", external_id="100", source="auto")
+    members = {77: object()} if in_server else {}
+    cog.bot.primary_guild = lambda: SimpleNamespace(get_member=members.get)
+    cog._fetch_image = AsyncMock(return_value=b"\x89PNG fake")
+    await cog.handle(ev.GALLERY_IMAGE_CREATE, load_fixture("real_galleryImage_create"))
+    call = ch[200].send.await_args
+    assert call.kwargs["content"] == content
+    assert call.kwargs["allowed_mentions"].users is False  # the mention never pings
+
+
+@pytest.mark.parametrize(
+    ("linked", "content"), [(True, "New file available · by <@77>"), (False, "New file available")]
+)
+async def test_file_post_names_linked_author_in_text(tmp_path, linked, content):
+    from flyvikingbot.storage import Storage
+
+    cog, ch = make_cog(tmp_path)
+    cog.bot.storage = Storage(tmp_path / "db.sqlite")
+    await cog.bot.storage.init()
+    if linked:  # website member 1 (the fixture's author) is linked to Discord user 77
+        await cog.bot.storage.save_link(discord_id=77, ips_member_id=1, ips_profile_url=None, discord_name="joram",
+                                        service="fsa", external_id="100", source="auto")
+    cog.bot.primary_guild = lambda: SimpleNamespace(get_member={77: object()}.get)
+    await cog.handle(ev.DOWNLOADS_FILE_CREATE, load_fixture("real_downloadsFile_create"))
+    call = ch[100].send.await_args
+    assert call.kwargs["content"] == content
+    assert call.kwargs["embed"].author.name == "JoramD"  # the header keeps the website author
+    assert call.kwargs["allowed_mentions"].users is False

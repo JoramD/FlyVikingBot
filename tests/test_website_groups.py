@@ -35,7 +35,7 @@ async def env(tmp_path):
     storage = Storage(tmp_path / "db.sqlite")
     await storage.init()
     website = SimpleNamespace(list_groups=AsyncMock(return_value=GROUPS), get_member=AsyncMock(),
-                              update_member_groups=AsyncMock())
+                              update_member_groups=AsyncMock(), update_member_field=AsyncMock())
     bot = SimpleNamespace(settings=settings, storage=storage, fsa=SimpleNamespace(ranks=AsyncMock(return_value=RANKS)),
                           website=website, primary_guild=lambda: None, post_system_message=AsyncMock())
     return SimpleNamespace(cog=pc.Pilots(bot), bot=bot, website=website)
@@ -169,4 +169,72 @@ async def test_website_client_group_requests():
         assert form.getall("secondaryGroups[]") == ["21", "30"]
         await client.update_member_groups(1, secondary=[])
         assert received["form"]["secondaryGroups"] == "" and "group" not in received["form"]
+        await client.update_member_field(1, 7, "Captain")
+        assert dict(received["form"]) == {"customFields[7]": "Captain"}
     await server.close()
+
+
+# --- the rank profile field (IPS_FIELD_FSA_RANK) ---------------------------------------------------------
+
+RANK_FIELD = 7
+
+
+def member_with_rank(value):
+    return {"id": 1, "customFields": {"3": {"name": "Linked accounts", "fields": {str(RANK_FIELD): {"value": value}}}}}
+
+
+@pytest.fixture
+def field_env(env, tmp_path):
+    env.cog.settings = load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path), "CHANNEL_SYSTEM_MESSAGES": "900",
+                                          "IPS_FIELD_FSA_RANK": str(RANK_FIELD)})
+    return env
+
+
+@pytest.mark.parametrize(
+    ("current", "rank_id", "clear", "written"),
+    [
+        ("First Officer", 2, False, "Captain"),  # promotion
+        (None, 1, False, "First Officer"),  # first sync: field still empty
+        ("Captain", 9, False, "Chief Executive"),  # Board ranks are shown too (display only)
+        ("Captain", None, True, ""),  # unlink clears it
+    ],
+)
+async def test_rank_field_written(field_env, current, rank_id, clear, written):
+    field_env.website.get_member.return_value = member_with_rank(current)
+    change = await field_env.cog.set_website_rank_field(1, rank_id, clear=clear, label="<@1>")
+    field_env.website.update_member_field.assert_awaited_once_with(1, RANK_FIELD, written)
+    assert change == f"<@1> (website rank field): {current or 'empty'} → {written or 'empty'}"
+
+
+async def test_rank_field_up_to_date_makes_no_write(field_env):
+    field_env.website.get_member.return_value = member_with_rank("Captain")
+    assert await field_env.cog.set_website_rank_field(1, 2) is None
+    field_env.website.update_member_field.assert_not_awaited()
+
+
+async def test_rank_field_skipped_without_setting_rank_or_rank_list(env, field_env):
+    assert await field_env.cog.set_website_rank_field(1, None) is None  # FSA gave no rank
+    assert await field_env.cog.set_website_rank_field(1, 42) is None  # rank not in the rank list
+    field_env.bot.fsa.ranks.side_effect = ServiceError("down")
+    assert await field_env.cog.set_website_rank_field(1, 2) is None  # rank list unavailable
+    field_env.website.get_member.assert_not_awaited()
+    field_env.cog.settings = load_settings(env={**BASE_ENV, "DATA_DIR": "x"})  # IPS_FIELD_FSA_RANK unset
+    field_env.bot.fsa.ranks.side_effect = None
+    assert await field_env.cog.set_website_rank_field(1, 2) is None
+    field_env.website.get_member.assert_not_awaited()
+
+
+async def test_rank_field_error_reported_once(field_env):
+    field_env.website.get_member.return_value = member_with_rank("First Officer")
+    field_env.website.update_member_field.side_effect = ServiceError("Website API error: NO_PERMISSION")
+    await field_env.cog.set_website_rank_field(1, 2)
+    await field_env.cog.set_website_rank_field(1, 2)
+    field_env.bot.post_system_message.assert_awaited_once()
+    assert "IPS_FIELD_FSA_RANK" in field_env.bot.post_system_message.await_args.args[0]
+
+
+async def test_sync_ranks_updates_groups_and_rank_field(field_env):
+    field_env.website.get_member.side_effect = [ips_member(secondary=[20]), member_with_rank("First Officer")]
+    change = await field_env.cog.sync_ranks(None, 1, 2)
+    assert change == ("website member 1 (website): First Officer → Captain; "
+                      "website member 1 (website rank field): First Officer → Captain")

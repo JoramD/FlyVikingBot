@@ -88,12 +88,13 @@ def _file(ctx: Context, *, new_version: bool) -> dict[str, Any]:
         changelog=ev.excerpt("<p>Sharper tail logo, fixed the <b>door</b> textures.</p>") if new_version else None,
         date=NOW,
     )
-    return file_message(file, new_version=new_version)
+    return file_message(file, new_version=new_version, mention=ctx.mention)  # as for a linked author
 
 
 def _gallery(ctx: Context) -> dict[str, Any]:
     image = ev.GalleryImage(url=f"{ctx.site}/gallery/", image_url=f"{ctx.site}/{SAMPLE_IMAGE}", author=ctx.author)
-    return gallery_message(image, sample_png())
+    # A linked uploader is shown as their Discord mention (unlinked ones get their website profile link)
+    return gallery_message(image, sample_png(), mention=ctx.mention)
 
 
 def _flight_log(ctx: Context) -> dict[str, Any]:

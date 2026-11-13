@@ -10,6 +10,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from ..constants import BRAND_COLOUR
+from ..interactions import reply_ephemeral
 from ..services.http import ServiceError
 from ..webhooks import ips_events as ev
 from .website_events import file_embed, with_category_path
@@ -50,7 +51,7 @@ class Website(commands.Cog):
     async def _error(self, interaction: discord.Interaction, message: str) -> None:
         # Replace the public "thinking..." placeholder with a private error (errors stay visible)
         await interaction.delete_original_response()
-        await interaction.followup.send(f":x: ERROR: {message}", ephemeral=True)
+        await reply_ephemeral(interaction, f":x: ERROR: {message}", delete_after=None)
 
     @app_commands.command(name="file_lookup", description="Find a file in the website's downloads")
     @app_commands.describe(query="Words from the file's title, e.g. A320 livery")

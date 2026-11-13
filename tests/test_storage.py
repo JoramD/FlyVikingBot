@@ -57,3 +57,26 @@ async def test_kv(storage):
     assert await storage.kv_keys("review:") == ["review:5"]
     await storage.kv_delete("a")
     assert await storage.kv_get("a") is None
+
+
+async def test_connections_are_closed(tmp_path, monkeypatch):
+    """Each call opens and closes its own connection (Python 3.13 warns about unclosed ones)."""
+    import sqlite3
+
+    opened = []
+    real_connect = sqlite3.connect
+
+    def tracking_connect(*args, **kwargs):
+        conn = real_connect(*args, **kwargs)
+        opened.append(conn)
+        return conn
+
+    monkeypatch.setattr(sqlite3, "connect", tracking_connect)
+    storage = Storage(tmp_path / "db.sqlite")
+    await storage.init()
+    await storage.kv_set("a", "1")
+    assert await storage.kv_get("a") == "1"  # the write was committed
+    assert len(opened) == 3
+    for conn in opened:
+        with pytest.raises(sqlite3.ProgrammingError):  # "Cannot operate on a closed database."
+            conn.execute("SELECT 1")

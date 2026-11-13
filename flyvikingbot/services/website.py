@@ -25,6 +25,7 @@ class FileSearchResult:
 
 MAX_MATCHES = 5  # files listed when a search has several matches
 CATEGORY_CACHE_SECONDS = 3600
+MEMBER_CACHE_SECONDS = 60  # one member scan serves all on-demand lookups within a minute
 CATEGORY_SEPARATOR = " › "
 
 
@@ -48,6 +49,7 @@ class WebsiteClient:
         self._base_url = base_url
         self._api_key = api_key
         self._categories: tuple[float, dict[int, tuple[str, int | None]]] | None = None
+        self._members: tuple[float, list[dict[str, Any]]] | None = None
 
     def build_url(self, endpoint: str, **params: Any) -> URL:
         # IPS routes on the raw query string (index.php?/core/search&q=...), so the
@@ -122,10 +124,16 @@ class WebsiteClient:
         return groups
 
     async def list_members(self) -> list[dict[str, Any]]:
-        """All members (paged). Used for on-demand lookups; the API can't filter by profile field."""
+        """All members (paged). Used for on-demand lookups; the API can't filter by profile field.
+        Cached briefly: anyone can trigger lookups (e.g. /pilot member:X for many members), and each
+        would otherwise scan every member page."""
+        now = time.monotonic()
+        if self._members and now - self._members[0] < MEMBER_CACHE_SECONDS:
+            return self._members[1]
         members: list[dict[str, Any]] = []
         async for page in self._pages("/core/members"):
             members += page
+        self._members = (now, members)
         return members
 
     async def _pages(self, endpoint: str, per_page: int = 100, max_pages: int = 100):
@@ -157,6 +165,12 @@ class WebsiteClient:
             form += [("secondaryGroups[]", str(g)) for g in secondary] or [("secondaryGroups", "")]
         if not form:
             return {}
+        return await self._request("POST", f"/core/members/{member_id}", {}, data=form)
+
+
+    async def update_member_field(self, member_id: int, field_id: int, value: str) -> dict[str, Any]:
+        """Set one custom profile field (an empty value clears it). Nothing else about the member is changed."""
+        form = [(f"customFields[{field_id}]", value)]
         return await self._request("POST", f"/core/members/{member_id}", {}, data=form)
 
 
