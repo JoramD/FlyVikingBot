@@ -116,7 +116,6 @@ class Pilot:
     location: str | None
     last_active: datetime | None
     callsign: str | None = None  # VA callsign, e.g. FVK003
-    fsa_title: str | None = None  # FSAirlines-wide title, e.g. "Senior Flight Captain"
     pax: int | None = None
     cargo_kg: int | None = None  # cargo + packages
     picture_url: str | None = None
@@ -197,7 +196,6 @@ def parse_pilot(d: dict[str, Any]) -> Pilot | None:
         location=_str(d.get("location")),
         last_active=_datetime(d.get("lastactive") or d.get("last_active")),
         callsign=_str(d.get("va_user")),
-        fsa_title=_str(d.get("fsa_rating")),
         pax=_int(d.get("pax")),
         cargo_kg=sum(cargo) if cargo else None,
         picture_url=(picture if picture.startswith("http") else SITE_URL + picture.lstrip("/")) if picture else None,

@@ -113,10 +113,9 @@ def pilot_embed(pilot: Pilot, mention: str | None, last_flight: Any | None, rank
         if last_flight.landing_rate is not None:
             parts.append(f"{last_flight.landing_rate:+d} fpm")
         embed.add_field(name="Last flight", value=" · ".join(parts), inline=False)
-    footer = f"FSAirlines pilot {pilot.id}"
-    if pilot.fsa_title:
-        footer += f" · {pilot.fsa_title}"
-    embed.set_footer(text=footer)
+    # Not FSA's site-wide "fsa_rating" title (e.g. "Senior Flight Captain"): it isn't the FlyViking rank and
+    # contradicts the Rank field, e.g. for Board members
+    embed.set_footer(text=f"FSAirlines pilot {pilot.id}")
     return embed
 
 

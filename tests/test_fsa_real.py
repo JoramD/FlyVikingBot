@@ -63,7 +63,7 @@ async def test_pilot_from_real_data(fsa):
     assert embed.title == "Ola Hansen · FVK001"
     assert fields["Rank"] == "Chief Executive Officer" and fields["Avg. rating"] == "99.7%"
     assert fields["Hours"] == "1156:54" and fields["Flights"] == "672"
-    assert "Senior Flight Captain" in embed.footer.text
+    assert embed.footer.text == "FSAirlines pilot 97396"  # not FSA's site-wide "Senior Flight Captain" title
 
 
 async def test_ranks_and_callsign_resolution(fsa):
