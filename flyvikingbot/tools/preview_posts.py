@@ -99,7 +99,7 @@ def _gallery(ctx: Context) -> dict[str, Any]:
 def _flight_log(ctx: Context) -> dict[str, Any]:
     flight = FlightLog(
         id=0, number="FVK123", dep="BIKF", arr="ENGM", planned_arr="ENGM", aircraft="Airbus A320neo",
-        pilot_id="0", pilot_name="SamplePilot", hours=2.75, distance=1046, rating=96, pax=164, cargo_kg=2140,
+        pilot_id="0", pilot_name="SamplePilot", hours=2.75, distance=1046, rating=95, pax=164, cargo_kg=2140,
         landing_rate=-142, completed_at=NOW, callsign="FVK000", packages_kg=None, sim="FS2024",
     )
     return flight_log_message(flight, ctx.mention)
