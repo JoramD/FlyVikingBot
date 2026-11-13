@@ -160,6 +160,12 @@ class WebsiteClient:
         return await self._request("POST", f"/core/members/{member_id}", {}, data=form)
 
 
+    async def update_member_field(self, member_id: int, field_id: int, value: str) -> dict[str, Any]:
+        """Set one custom profile field (an empty value clears it). Nothing else about the member is changed."""
+        form = [(f"customFields[{field_id}]", value)]
+        return await self._request("POST", f"/core/members/{member_id}", {}, data=form)
+
+
 def member_group_ids(member: dict[str, Any]) -> tuple[int | None, set[int]]:
     """(primary group ID, secondary group IDs) from an IPS member object."""
     primary = member.get("primaryGroup") or {}

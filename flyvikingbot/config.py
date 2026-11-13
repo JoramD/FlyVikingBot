@@ -42,6 +42,7 @@ class Settings:
     system_messages_role_id: int | None  # pinged on #system-messages posts that need staff action
     ips_field_fsa_pilot_id: int | None
     ips_field_discord_name: int | None
+    ips_field_fsa_rank: int | None  # read-only profile field the bot fills with the FSA rank; unset = off
     fsa_poll_seconds: int
     fsa_rank_sync_minutes: int
     fsa_rank_roles: tuple[str, ...]  # the only Discord roles / website groups managed for FSA ranks; empty = off
@@ -121,6 +122,7 @@ def load_settings(
         system_messages_role_id=optional_int("SYSTEM_MESSAGES_ROLE_ID"),
         ips_field_fsa_pilot_id=optional_int("IPS_FIELD_FSA_PILOT_ID"),
         ips_field_discord_name=optional_int("IPS_FIELD_DISCORD_NAME"),
+        ips_field_fsa_rank=optional_int("IPS_FIELD_FSA_RANK"),
         fsa_poll_seconds=max(60, int_with_default("FSA_POLL_SECONDS", "120")),
         fsa_rank_sync_minutes=max(5, int_with_default("FSA_RANK_SYNC_MINUTES", "60")),
         website_rank_sync=_bool(get("WEBSITE_RANK_SYNC", "true")),

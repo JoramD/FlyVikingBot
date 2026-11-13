@@ -229,7 +229,7 @@ class MemberProfile:
     discord_name: str | None
 
 
-def _custom_field(data: dict[str, Any], field_id: int | None) -> str | None:
+def custom_field(data: dict[str, Any], field_id: int | None) -> str | None:
     """Find a custom profile field by ID. IPS nests them as
     {"<group id>": {"name": ..., "fields": {"<field id>": {"name": ..., "value": ...}}}}."""
     if field_id is None:
@@ -257,8 +257,8 @@ def parse_member_profile(
         member_id=member_id,
         name=_str(data.get("name")),
         profile_url=_str(data.get("profileUrl")),
-        fsa_pilot_id=_custom_field(data, fsa_field_id),
-        discord_name=_custom_field(data, discord_field_id),
+        fsa_pilot_id=custom_field(data, fsa_field_id),
+        discord_name=custom_field(data, discord_field_id),
     )
 
 

@@ -486,7 +486,36 @@ class Pilots(commands.Cog):
             label = member.mention if member else f"website member {ips_member_id}"
             if change := await self.set_website_groups(ips_member_id, rank_id, clear=clear, label=label):
                 changes.append(change)
+            if change := await self.set_website_rank_field(ips_member_id, rank_id, clear=clear, label=label):
+                changes.append(change)
         return "; ".join(changes) or None
+
+    async def set_website_rank_field(
+        self, ips_member_id: int, rank_id: int | None, *, clear: bool = False, label: str = ""
+    ) -> str | None:
+        """Write the full FSA rank name (Board ranks included; it's display only) into the read-only
+        profile field IPS_FIELD_FSA_RANK, so it shows on the member's website profile. Cleared on unlink."""
+        field_id = self.settings.ips_field_fsa_rank
+        if not field_id or (rank_id is None and not clear):
+            return None  # off, or FSA gave no rank: don't blank the field on incomplete data
+        value = "" if clear else await self.rank_name(rank_id)
+        if value is None:
+            return None  # rank list unavailable or unknown rank: try again next sync
+        try:
+            current = ev.custom_field(await self.bot.website.get_member(ips_member_id), field_id) or ""
+            if current != value:
+                await self.bot.website.update_member_field(ips_member_id, field_id, value)
+        except ServiceError as exc:
+            await self.report_once(
+                "website-rank-field",
+                f"⚠️ Couldn't update the website rank profile field ({exc}). Check that IPS_FIELD_FSA_RANK is the "
+                "right field ID and that the website API key may use GET + POST /core/members/{id}.",
+            )
+            return None
+        await self.resolved("website-rank-field")
+        if current == value:
+            return None
+        return f"{label} (website rank field): {current or 'empty'} → {value or 'empty'}"
 
     async def website_group_map(self) -> tuple[dict[int, int | None], set[int]]:
         """Like rank_role_map, for website member groups (cached for an hour)."""

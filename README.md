@@ -18,6 +18,7 @@ Discord bot for the FlyViking virtual airline, connecting [flyviking.net](https:
 - **Account linking:** members fill in *FSAirlines Pilot ID* (their callsign such as `FVK003`, or the numeric ID) and *Discord username* on their flyviking.net profile, and the bot links them automatically. If the names on the website and in FSAirlines differ, it still links and adds a note to the "✅ Linked" post. An unknown pilot or Discord user goes to #system-messages with the member's profile link. So does a pilot or Discord account that's already linked to someone else, which also gets Approve/Reject buttons. If the website's update was missed, for example because the bot was offline, commands that need the link (`/pilot`, and `/sync_rank member:` for staff) look up the member's website profile and link them right away. This needs the website API key to be allowed to use `GET /core/members`.
 - **Rank roles:** linked members get the Discord role named after their FSAirlines rank (or its short name). It syncs hourly and right after linking. Only the roles listed in `FSA_RANK_ROLES` are ever assigned or removed; if it's empty, rank roles are switched off. A pilot on any other rank, such as Board of Directors, loses those rank roles and gets nothing automatically. #system-messages is told once, with their profile link, so staff can assign the Board role by hand.
 - **Website rank groups** (on by default; turn off with `WEBSITE_RANK_SYNC=false`): the same rank is mirrored to a website **secondary** member group with the same name. Only those allowlisted groups are touched. Pilots on one of those ranks also get **Members** as their primary group. Administrators and Moderators (`WEBSITE_PROTECTED_GROUPS`) are never changed, and an old primary such as Painter/Modder is kept as a secondary group. Members without a pilot rank, such as external painters, are never touched. This prepares for rank-restricted content later.
+- **Rank on the website profile** (optional, `IPS_FIELD_FSA_RANK`): IPS profiles only show the primary group, so the bot writes each linked pilot's full FSA rank, Board ranks included, into a read-only profile field. It's updated with the rank sync and cleared when the member is unlinked.
 
 **Website → Discord** (via Invision Community webhooks)
 | IPS event | Discord |
@@ -84,6 +85,7 @@ Everything the bot needs outside this repository, in one place. Details follow i
   - `GET /core/groups`, `GET /core/members/{id}` and `POST /core/members/{id}` (website rank groups)
 - [ ] Webhooks (one per event) to `http://flyviking-bot:8080/ips/<WEBHOOK_SECRET>/<event>`: `galleryImage_create`, `blogEntry_create`, `downloadsFile_create`, `downloads_new_version` and `member_edited`.
 - [ ] Two member-editable profile fields: **FSAirlines Pilot ID** (text; regex `/^\s*(?:FVK\d{3,}|\d+)\s*$/i`) and **Discord Username**. Their IDs go in `IPS_FIELD_FSA_PILOT_ID` / `IPS_FIELD_DISCORD_NAME`.
+- [ ] Optional: a **FlyViking rank** profile field (text, *not* editable by members, shown on profiles and optionally in posts). Its ID goes in `IPS_FIELD_FSA_RANK`.
 - [ ] Secondary member groups named like the rank roles, and a **Members** group.
 - [ ] The **cron** container, which sends the webhooks, on the `flyviking` Docker network, permanently in the website's compose file. It also needs a working cron/task setup.
 
@@ -137,7 +139,8 @@ Health check: `GET /health`.
    - Create a role for each FSAirlines rank that should be assigned automatically, named exactly after the rank (or its short name), and list them in `FSA_RANK_ROLES`.
    - Move the bot's role **above** those rank roles, and give it Manage Roles.
 3. **Website rank groups:** create secondary member groups named like the rank roles, and allow the website API key to use `GET /core/groups` and `GET` + `POST /core/members/{id}`. Missing groups or permissions are reported to #system-messages. Set `WEBSITE_RANK_SYNC=false` to turn this off.
-4. Set `CHANNEL_FLIGHT_LOGS` and `CHANNEL_SYSTEM_MESSAGES` in `.env`, then run `docker compose up -d --build`.
+4. **Rank on the profile (optional):** create a text profile field such as **FlyViking rank**. Members must not be able to edit it. Turn on showing it on the profile and, if you like, next to posts. Put its ID in `IPS_FIELD_FSA_RANK`. It uses the same `GET` + `POST /core/members/{id}` permission. The field fills on the next hourly sync, or right away with `/sync_rank`.
+5. Set `CHANNEL_FLIGHT_LOGS` and `CHANNEL_SYSTEM_MESSAGES` in `.env`, then run `docker compose up -d --build`.
 
 The flight log feed starts from the newest existing flight and doesn't post the backlog.
 
