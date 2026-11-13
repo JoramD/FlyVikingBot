@@ -19,21 +19,24 @@ class Admin(commands.Cog):
     def __init__(self, bot: FlyVikingBot) -> None:
         self.bot = bot
 
-    @app_commands.command(name="clear", description="Clears multiple messages")
-    @app_commands.describe(amount="Amount of messages to clear")
+    @app_commands.command(name="clear", description="Delete the most recent messages in this channel")
+    @app_commands.describe(amount="How many messages to delete (1-50)")
     @app_commands.default_permissions(administrator=True)
     @app_commands.guild_only()
     async def clear(self, interaction: discord.Interaction, amount: app_commands.Range[int, 1, 50]) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
         channel = interaction.channel
         if not isinstance(channel, (discord.TextChannel, discord.Thread, discord.VoiceChannel)):
-            await reply_ephemeral(interaction, ":x: ERROR: Can't clear messages here.")
+            await reply_ephemeral(interaction, ":x: ERROR: Can't clear messages here.", delete_after=None)
             return
         try:
             deleted = await channel.purge(limit=amount, reason=f"/clear by {interaction.user}")
         except discord.Forbidden:
-            await reply_ephemeral(interaction, ":x: ERROR: I lack permission to delete messages here.")
+            await reply_ephemeral(
+                interaction, ":x: ERROR: I lack permission to delete messages here.", delete_after=None
+            )
             return
+        # Only the confirmation disappears; errors stay so they can be read
         await reply_ephemeral(interaction, f":white_check_mark: Deleted {len(deleted)} messages.")
 
 

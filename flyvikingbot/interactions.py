@@ -6,7 +6,8 @@ from typing import Any
 
 import discord
 
-# Short ephemeral replies (confirmations, errors) remove themselves after this many seconds
+# Ephemeral confirmations remove themselves after this many seconds; pass delete_after=None for errors
+# so the user has time to read them
 EPHEMERAL_SECONDS = 10.0
 
 
