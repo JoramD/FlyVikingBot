@@ -56,10 +56,10 @@ def website_embed(
 
 
 def announcement_embed(entry: ev.BlogEntry) -> discord.Embed:
+    # No author: announcements speak for FlyViking, not for whoever wrote them
     return website_embed(
         title=entry.title,
         url=entry.url,
-        author=entry.author,
         description=entry.excerpt,
         image_url=entry.image_url,
         category=entry.category,

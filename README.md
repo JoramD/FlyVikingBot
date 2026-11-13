@@ -22,7 +22,7 @@ Discord bot for the FlyViking virtual airline, connecting [flyviking.net](https:
 | IPS event | Discord |
 |---|---|
 | `galleryImage_create` | Full-size image upload in #screenshots, with "Uploaded by <author>" |
-| `blogEntry_create` | `@everyone` announcement embed in #announcements (author, excerpt, image, blog category) |
+| `blogEntry_create` | `@everyone` announcement embed in #announcements (excerpt, image, blog category) |
 | `downloadsFile_create` | "New file available" embed in #announcements (author, description, screenshot, category, version) |
 | `downloads_new_version` | "New version available" embed in #announcements, the same as a new file plus the changelog |
 

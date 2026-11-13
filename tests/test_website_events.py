@@ -97,8 +97,7 @@ async def test_real_ips_blog_entry_payload(tmp_path):
     assert embed.title == "Test9"
     assert embed.url == "https://flyviking.net/blogs/entry/21-test9/"
     assert embed.description == "9"
-    assert embed.author.name == "JoramD"
-    assert embed.author.url == "https://flyviking.net/profile/1-joramd/"
+    assert embed.author.name is None  # announcements don't name the author
     assert embed.footer.text == "Announcement · flyviking.net"
     assert embed.timestamp is not None and embed.timestamp.year == 2026
     assert embed.image.url is None
