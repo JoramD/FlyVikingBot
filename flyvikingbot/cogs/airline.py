@@ -21,29 +21,28 @@ log = logging.getLogger(__name__)
 STAT_FIELDS = (
     ("Flights", "flights", ""),
     ("Hours flown", "hours", ""),
-    ("Distance Flown", "distance", "nm"),
-    ("Fuel Used", "fuel_used", "kg"),
-    ("Passengers Moved", "pax", ""),
-    ("Generic Cargo Moved", "cargo_kg", "kg"),
-    ("Packages Moved", "packages_kg", "kg"),
+    ("Distance flown", "distance", " nm"),
+    ("Fuel used", "fuel_used", " kg"),
+    ("Passengers moved", "pax", ""),
+    ("Generic cargo moved", "cargo_kg", " kg"),
+    ("Packages moved", "packages_kg", " kg"),
 )
 
 
 def _fmt(value: Any, suffix: str) -> str:
     try:
-        return f"{int(float(value)):,}{suffix}"
+        return f"{round(float(value)):,}{suffix}"
     except (TypeError, ValueError):
         return "n/a"
 
 
 def stats_embed(data: dict[str, Any]) -> discord.Embed:
     embed = discord.Embed(
-        title=f"{EMOJI_FLYVIKING_V} Airline Statistics",
-        description="Various airline-wide statistics",
-        colour=BRAND_COLOUR,
+        title=f"{EMOJI_FLYVIKING_V} Airline Statistics", colour=BRAND_COLOUR, timestamp=discord.utils.utcnow()
     )
     for name, key, suffix in STAT_FIELDS:
         embed.add_field(name=name, value=_fmt(data.get(key), suffix), inline=True)
+    embed.set_footer(text="FSAirlines")
     return embed
 
 
@@ -60,7 +59,7 @@ class Airline(commands.Cog):
             log.error("Could not retrieve data from FSAirlines: %s", exc)
             await interaction.delete_original_response()
             await interaction.followup.send(
-                ":x: ERROR: Could not retrieve data from FSAirlines", ephemeral=True
+                ":x: ERROR: Could not reach FSAirlines. Try again later.", ephemeral=True
             )
             return
         await interaction.followup.send(embed=stats_embed(data))

@@ -722,7 +722,7 @@ class Pilots(commands.Cog):
             )
         except ServiceError as exc:
             log.error("sync_rank failed: %s", exc)
-            await interaction.followup.send(":x: ERROR: Could not reach FSAirlines.", ephemeral=True)
+            await interaction.followup.send(":x: ERROR: Could not reach FSAirlines. Try again later.", ephemeral=True)
 
     @app_commands.command(name="pilot", description="Show FSAirlines pilot statistics")
     @app_commands.describe(
@@ -776,7 +776,7 @@ class Pilots(commands.Cog):
         except ServiceError as exc:
             log.error("Could not retrieve pilot %s: %s", pilot or fsa_id, exc)
             await interaction.delete_original_response()
-            await interaction.followup.send(":x: ERROR: Could not retrieve data from FSAirlines", ephemeral=True)
+            await interaction.followup.send(":x: ERROR: Could not reach FSAirlines. Try again later.", ephemeral=True)
             return
         try:
             flights = await self.bot.fsa.flight_logs(count=1, pilot_id=fsa_id)
