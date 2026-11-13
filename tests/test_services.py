@@ -3,9 +3,8 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
-from flyvikingbot.services.fsairlines import get_airline_stats
 from flyvikingbot.services.http import ServiceError
-from flyvikingbot.services.website import WebsiteClient
+from flyvikingbot.services.website import WebsiteClient, category_path
 
 
 class FakeApi:
@@ -66,7 +65,25 @@ async def test_search_single_match_fetches_file(api):
 async def test_search_zero_or_many(api, total):
     api[0].responses["/core/search"] = (200, {"totalResults": total, "results": []})
     result = await client(api).search_files("x")
-    assert result.total == total and result.file is None
+    assert result.total == total and result.file is None and result.matches == []
+
+
+async def test_search_many_fetches_first_five_files(api):
+    fake = api[0]
+    ids = [11, 12, 12, 13, 14, 15, 16]  # duplicate and a 7th result: only the first 5 results, deduplicated
+    fake.responses["/core/search"] = (200, {"totalResults": 9, "results": [{"itemId": i} for i in ids]})
+    for i in (11, 12, 14, 15):  # 13 fails; the rest are still listed
+        fake.responses[f"/downloads/files/{i}"] = (200, {"id": i, "title": f"File {i}"})
+    result = await client(api).search_files("x")
+    assert result.total == 9 and result.file is None
+    assert [f["id"] for f in result.matches] == [11, 12, 14]
+    assert not any(r.startswith("/downloads/files/15") for r in fake.requests)
+
+
+async def test_search_many_all_fetches_failing_is_service_error(api):
+    api[0].responses["/core/search"] = (200, {"totalResults": 3, "results": [{"itemId": 1}, {"itemId": 2}]})
+    with pytest.raises(ServiceError, match="no data"):
+        await client(api).search_files("x")
 
 
 async def test_website_api_error(api):
@@ -83,11 +100,28 @@ async def test_network_error_does_not_leak_key():
     assert "secret-key" not in str(info.value)
 
 
-async def test_fsairlines(api):
-    fake, session, base = api
-    url = f"{base}/va_interface2.php"
-    assert (await get_airline_stats(session, 42982, "k", api_url=url))["flights"] == "10"
-    assert "va_id=42982" in fake.requests[-1]
-    fake.fsa = (200, {"status": "FAILURE"})
-    with pytest.raises(ServiceError):
-        await get_airline_stats(session, 1, "k", api_url=url)
+@pytest.mark.parametrize("body", [{"totalResults": 1, "results": []}, {"totalResults": "x"}, {"totalResults": 1}])
+async def test_search_malformed_response_is_service_error(api, body):
+    api[0].responses["/core/search"] = (200, body)
+    with pytest.raises(ServiceError, match="unexpected data"):
+        await client(api).search_files("x")
+
+
+def test_category_path():
+    cats = {1: ("Paints", None), 2: ("FlyViking", 1), 3: ("A320", 2), 8: ("Loop", 9), 9: ("Back", 8)}
+    assert category_path(cats, 2) == "Paints › FlyViking"
+    assert category_path(cats, 3) == "Paints › FlyViking › A320"
+    assert category_path(cats, 1) == "Paints"
+    assert category_path(cats, 42) is None
+    assert category_path(cats, 8) == "Back › Loop"  # a parent loop doesn't hang
+
+
+async def test_download_categories_are_cached(api):
+    fake = api[0]
+    fake.responses["/downloads/categories"] = (200, {"page": 1, "totalPages": 1, "results": [
+        {"id": 1, "name": "Paints", "parentId": 0}, {"id": 2, "name": "FlyViking", "parentId": 1}, {"bad": True},
+    ]})
+    website = client(api)
+    assert await website.download_categories() == {1: ("Paints", None), 2: ("FlyViking", 1)}
+    await website.download_categories()
+    assert sum(r.startswith("/downloads/categories") for r in fake.requests) == 1

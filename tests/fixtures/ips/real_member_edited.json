@@ -1,0 +1,45 @@
+{
+  "member": {
+    "id": 3,
+    "name": "TestPilot",
+    "title": null,
+    "primaryGroup": {
+      "id": 4,
+      "name": "Administrators",
+      "formattedName": "Administrators"
+    },
+    "secondaryGroups": [],
+    "email": "<redacted>",
+    "registrationIpAddress": "<redacted>",
+    "birthday": "<redacted>",
+    "profileUrl": "https://flyviking.net/profile/3-testpilot/",
+    "login_methods": [],
+    "customFields": {
+      "1": {
+        "name": "Personal Information",
+        "fields": {
+          "1": {
+            "name": "About Me",
+            "value": ""
+          }
+        }
+      },
+      "3": {
+        "name": "Linked accounts",
+        "fields": {
+          "3": {
+            "name": "FSAirlines Pilot ID",
+            "value": "3123213"
+          },
+          "4": {
+            "name": "Discord Username",
+            "value": "13213"
+          }
+        }
+      }
+    }
+  },
+  "changes": {
+    "pp_last_visitors": "{\"1\":1794521279}"
+  }
+}

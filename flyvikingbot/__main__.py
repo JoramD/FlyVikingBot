@@ -1,3 +1,5 @@
+"""Entry point: `python -m flyvikingbot`. Loads settings, sets up logging and runs the bot."""
+
 import logging
 import sys
 

@@ -1,0 +1,32 @@
+{
+  "status": "SUCCESS",
+  "data": [
+    {
+      "id": 97396,
+      "name": "Ola",
+      "surname": "Hansen",
+      "user": "OlaH",
+      "va_user": "FVK001",
+      "rank_id": 185472,
+      "location": "EGCC",
+      "budget": 4513381,
+      "lastactive": 1794400309,
+      "active": 0,
+      "sigac": "DB_161",
+      "timezone": "Europe/Oslo",
+      "weightunit": "kg",
+      "language": "en",
+      "msgmail": 0,
+      "rank": "CEO",
+      "flights": 672,
+      "rating": "66970",
+      "hours": 1156.8999962955713,
+      "distance": "358896",
+      "pax": "121103",
+      "cargo_kg": "2608941",
+      "packages_kg": "2522280",
+      "picture": "pics/pilots/97396.jpg",
+      "fsa_rating": "Senior Flight Captain"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+# Only flyvikingbot/ and requirements.txt are copied into the image; keep everything else
+# (secrets, local data, virtualenvs, git history) out of the build context entirely.
+.env
+credentials.json
+data/
+.venv/
+.git/
+.vscode/
+tests/
+**/__pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/

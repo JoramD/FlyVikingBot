@@ -1,29 +1,19 @@
 services:
-  discord-bot:
+  bot:
     build: .
-    image: joramd/flyviking-discord-bot
-    container_name: flyviking-discord-bot
+    image: joramd/flyviking-bot
+    container_name: flyviking-bot
     restart: always
     env_file: .env
     volumes:
       - ./data:/app/data
     networks:
       - flyviking
-    labels:
-      # Optional public webhook endpoint via Traefik, only needed if the website can't
-      # reach the bot over a shared Docker network. Enable with WEBHOOK_PUBLIC=true;
-      # Traefik must then be attached to the same network (or set DOCKER_NETWORK to Traefik's).
-      - traefik.enable=${WEBHOOK_PUBLIC:-false}
-      - traefik.docker.network=${DOCKER_NETWORK:-flyviking}
-      - traefik.http.routers.flyviking-bot.rule=Host(`${WEBHOOK_HOST:-bot.example.com}`) && PathPrefix(`/ips/`)
-      - traefik.http.routers.flyviking-bot.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
-      - traefik.http.routers.flyviking-bot.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
-      - traefik.http.services.flyviking-bot.loadbalancer.server.port=8080
 
 networks:
-  # Shared with the website container so IPS can POST to
-  # http://flyviking-discord-bot:8080/ips/<secret>/<event> without public exposure.
-  # Create once with: docker network create flyviking
+  # This compose file owns the network. The website's cron container (it sends the IPS webhooks)
+  # joins it as an *external* network, so IPS can POST to
+  # http://flyviking-bot:8080/ips/<secret>/<event> without public exposure.
+  # Start this stack before the website's, so the network exists.
   flyviking:
     name: ${DOCKER_NETWORK:-flyviking}
-    external: true

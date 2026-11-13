@@ -1,3 +1,5 @@
+"""Logging to stdout (docker logs) and a rotating file in the data folder."""
+
 import logging
 import sys
 from logging.handlers import RotatingFileHandler

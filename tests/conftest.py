@@ -12,6 +12,8 @@ BASE_ENV = {
     "FSA_API_KEY": "fsa",
     "WEBSITE_API_KEY": "web",
     "WEBHOOK_SECRET": "s" * 32,
+    "FSA_VA_ID": "42982",
+    "FSA_RANK_ROLES": "Trainee Pilot,First Officer,Senior First Officer,Cargo First Officer,Captain,Cargo Captain",
     "CHANNEL_ANNOUNCEMENTS": "100",
     "CHANNEL_SCREENSHOTS": "200",
 }
@@ -23,4 +25,4 @@ def load_fixture(name: str):
 
 @pytest.fixture
 def settings(tmp_path):
-    return load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path)}, credentials_path=tmp_path / "none.json")
+    return load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path)})

@@ -1,7 +1,9 @@
+"""/file_lookup: find a file in the website's downloads."""
+
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
@@ -9,6 +11,8 @@ from discord.ext import commands
 
 from ..constants import BRAND_COLOUR
 from ..services.http import ServiceError
+from ..webhooks import ips_events as ev
+from .website_events import file_embed, with_category_path
 
 if TYPE_CHECKING:
     from ..bot import FlyVikingBot
@@ -16,15 +20,26 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def file_embed(data: dict[str, Any]) -> discord.Embed:
-    embed = discord.Embed(title=data.get("title"), url=data.get("url"), colour=BRAND_COLOUR)
-    author = data.get("author") or {}
-    if author.get("name"):
-        icon = None if author.get("photoUrlIsDefault") else author.get("photoUrl")
-        embed.set_author(name=author["name"], url=author.get("profileUrl"), icon_url=icon)
-    screenshot = data.get("primaryScreenshot")
-    if isinstance(screenshot, dict) and screenshot.get("url"):
-        embed.set_image(url=screenshot["url"])
+def _link_text(text: str) -> str:
+    """Text that is safe inside a Markdown link label."""
+    return discord.utils.escape_markdown(text).replace("[", "(").replace("]", ")")
+
+
+def matches_embed(query: str, total: int, files: list[ev.DownloadsFile]) -> discord.Embed:
+    """The first few files of a search with several matches, each as a link."""
+    lines = []
+    for file in files:
+        parts = [f"[{_link_text(file.title or 'Untitled file')}]({file.url})"]
+        if file.category:
+            parts.append(file.category)
+        if file.author:
+            parts.append(f"by {discord.utils.escape_markdown(file.author.name)}")
+        lines.append(" · ".join(parts))
+    embed = discord.Embed(
+        title=f'{total} files match "{query[:100]}"', description="\n".join(lines), colour=BRAND_COLOUR
+    )
+    if total > len(lines):
+        embed.set_footer(text=f"Showing {len(lines)} of {total}; add words to narrow it down")
     return embed
 
 
@@ -33,28 +48,37 @@ class Website(commands.Cog):
         self.bot = bot
 
     async def _error(self, interaction: discord.Interaction, message: str) -> None:
-        # Replace the public "thinking..." placeholder with a private error
+        # Replace the public "thinking..." placeholder with a private error (errors stay visible)
         await interaction.delete_original_response()
         await interaction.followup.send(f":x: ERROR: {message}", ephemeral=True)
 
-    @app_commands.command(name="paint_lookup", description="Lookup aircraft paint on the website")
-    @app_commands.describe(query="Search term")
-    async def paint_lookup(self, interaction: discord.Interaction, query: str) -> None:
+    @app_commands.command(name="file_lookup", description="Find a file in the website's downloads")
+    @app_commands.describe(query="Words from the file's title, e.g. A320 livery")
+    async def file_lookup(self, interaction: discord.Interaction, query: str) -> None:
         assert self.bot.website is not None
         await interaction.response.defer(thinking=True)
         try:
             result = await self.bot.website.search_files(query)
         except ServiceError as exc:
-            log.error("Could not retrieve data from website: %s", exc)
-            await self._error(interaction, "Could not retrieve data from website")
+            log.error("Website file search failed: %s", exc)
+            await self._error(interaction, "Could not reach the website. Try again later.")
             return
 
-        if result.file is not None:
-            await interaction.followup.send(embed=file_embed(result.file))
+        # The REST file object has the same shape as the webhook payload: reuse the "New file" post layout
+        file = ev.parse_downloads_file(result.file) if result.file is not None else None
+        matches = [f for data in result.matches if (f := ev.parse_downloads_file(data)) is not None]
+        if file is not None:
+            file = await with_category_path(self.bot.website, file)
+            await interaction.followup.send(embed=file_embed(file, new_version=False))
+        elif matches:
+            # A list to pick from, not an error; private so the channel only gets the file that's picked
+            matches = [await with_category_path(self.bot.website, f) for f in matches]
+            await interaction.delete_original_response()
+            await interaction.followup.send(embed=matches_embed(query, result.total, matches), ephemeral=True)
         elif result.total > 1:
-            await self._error(interaction, "Too many matches")
+            await self._error(interaction, f"{result.total} files match; try more specific words.")
         else:
-            await self._error(interaction, "No matches")
+            await self._error(interaction, "No files match.")
 
 
 async def setup(bot: FlyVikingBot) -> None:
