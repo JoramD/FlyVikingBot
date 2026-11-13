@@ -52,7 +52,7 @@ class Admin(commands.Cog):
         minutes: app_commands.Range[int, 1, 1440] | None = None,
     ) -> None:
         if amount is None and minutes is None:
-            await reply_ephemeral(interaction, ":x: Give an amount, minutes, or both.", delete_after=None)
+            await reply_ephemeral(interaction, ":x: ERROR: Give an amount, minutes, or both.", delete_after=None)
             return
         await interaction.response.defer(ephemeral=True, thinking=True)
         channel = interaction.channel

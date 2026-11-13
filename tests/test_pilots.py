@@ -474,3 +474,31 @@ async def test_sync_rank_replies(env):
     interaction, _ = sync_interaction()
     await env.cog.sync_rank.callback(env.cog, interaction, member=None)
     assert "see the bot log" in interaction.followup.send.await_args.args[0]
+
+
+def pilot_interaction():
+    message = SimpleNamespace(delete=AsyncMock())
+    return SimpleNamespace(
+        user=SimpleNamespace(id=1, name="joramd"),
+        response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock(), is_done=MagicMock(return_value=True)),
+        followup=SimpleNamespace(send=AsyncMock(return_value=message)),
+        delete_original_response=AsyncMock(),
+    ), message
+
+
+async def test_pilot_not_found_error_stays_and_shows_input_safely(env):
+    env.fsa.resolve_pilot_id = AsyncMock(return_value=None)
+    interaction, message = pilot_interaction()
+    await env.cog.pilot.callback(env.cog, interaction, None, "FVK`99")
+    call = interaction.followup.send.await_args
+    assert call.args[0] == ":x: ERROR: FSAirlines pilot `FVK'99` not found."  # backtick can't break the code span
+    assert call.kwargs["ephemeral"] is True
+    message.delete.assert_not_awaited()  # errors stay
+
+
+async def test_pilot_member_and_pilot_together_is_an_error(env):
+    interaction, _ = pilot_interaction()
+    interaction.response.is_done = MagicMock(return_value=False)
+    await env.cog.pilot.callback(env.cog, interaction, env.joram, "FVK003")
+    call = interaction.response.send_message.await_args
+    assert call.args[0].startswith(":x: ERROR: Use either") and call.kwargs["delete_after"] is None

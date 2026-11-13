@@ -16,7 +16,7 @@ from discord.ext import commands, tasks
 
 from .. import linking as lk
 from ..constants import BRAND_COLOUR
-from ..interactions import fit_lines, reply_ephemeral
+from ..interactions import FSA_UNREACHABLE, fit_lines, reply_ephemeral
 from ..services.fsairlines import FsaNotFound, Pilot
 from ..services.http import ServiceError
 from ..services.website import member_group_ids
@@ -68,7 +68,7 @@ class ReviewButton(discord.ui.DynamicItem[discord.ui.Button], template=REVIEW_TE
     async def callback(self, interaction: discord.Interaction) -> None:
         cog = interaction.client.get_cog("Pilots")
         if cog is None:
-            await interaction.response.send_message("Linking is currently disabled.", ephemeral=True)
+            await interaction.response.send_message(":x: ERROR: Linking is currently disabled.", ephemeral=True)
             return
         await cog.handle_review(interaction, self.action, self.ips_member_id)
 
@@ -727,7 +727,7 @@ class Pilots(commands.Cog):
         await interaction.response.defer(ephemeral=True, thinking=True)
         if not self.rank_roles_enabled:
             await reply_ephemeral(
-                interaction, ":x: Rank roles are switched off (FSA_RANK_ROLES is empty).", delete_after=None
+                interaction, ":x: ERROR: Rank roles are switched off (FSA_RANK_ROLES is empty).", delete_after=None
             )
             return
         try:
@@ -747,7 +747,7 @@ class Pilots(commands.Cog):
                 return
             link, note = await self.ensure_link(member)
             if link is None:
-                msg = f":x: {member.mention} isn't linked to an FSAirlines pilot."
+                msg = f":x: ERROR: {member.mention} isn't linked to an FSAirlines pilot."
                 if note:
                     msg += " Their website profile was found, but it's waiting for staff review in #system-messages."
                 await reply_ephemeral(interaction, msg, delete_after=None)
@@ -789,7 +789,9 @@ class Pilots(commands.Cog):
         pilot: app_commands.Range[str, 1, 40] | None = None,
     ) -> None:
         if member and pilot:
-            await interaction.response.send_message("Use either `member` or `pilot`, not both.", ephemeral=True)
+            await reply_ephemeral(
+                interaction, ":x: ERROR: Use either `member` or `pilot`, not both.", delete_after=None
+            )
             return
 
         await interaction.response.defer(thinking=True)
@@ -799,18 +801,18 @@ class Pilots(commands.Cog):
             link, note = await self.ensure_link(target)
             if link is None:
                 if member:
-                    msg = f"{member.mention} hasn't linked an FSAirlines pilot."
+                    msg = f":x: ERROR: {member.mention} hasn't linked an FSAirlines pilot."
                 else:
                     msg = (
-                        "You haven't linked your FSAirlines pilot yet. On your "
+                        ":x: ERROR: You haven't linked your FSAirlines pilot yet. On your "
                         f"[flyviking.net profile](<{self.settings.website_root}>), fill in your "
                         "**FSAirlines Pilot ID** (or callsign) and **Discord username**; the bot links you "
                         "automatically."
                     )
                 if note and not member:  # review details are only shown to the member themselves
-                    msg = note
+                    msg = f":x: ERROR: {note}"
                 await interaction.delete_original_response()
-                await interaction.followup.send(msg, ephemeral=True)
+                await reply_ephemeral(interaction, msg, delete_after=None)
                 return
             fsa_id, mention = link.external_id, f"<@{link.discord_id}>"
 
@@ -824,12 +826,14 @@ class Pilots(commands.Cog):
             data = await self.bot.fsa.pilot(fsa_id)
         except FsaNotFound:
             await interaction.delete_original_response()
-            await interaction.followup.send(f":x: FSAirlines pilot `{pilot or fsa_id}` not found.", ephemeral=True)
+            await reply_ephemeral(
+                interaction, f":x: ERROR: FSAirlines pilot {lk.code(pilot or fsa_id)} not found.", delete_after=None
+            )
             return
         except ServiceError as exc:
             log.error("Could not retrieve pilot %s: %s", pilot or fsa_id, exc)
             await interaction.delete_original_response()
-            await interaction.followup.send(":x: ERROR: Could not reach FSAirlines. Try again later.", ephemeral=True)
+            await reply_ephemeral(interaction, FSA_UNREACHABLE, delete_after=None)
             return
         try:
             flights = await self.bot.fsa.flight_logs(count=1, pilot_id=fsa_id)

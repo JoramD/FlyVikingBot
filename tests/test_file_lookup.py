@@ -19,7 +19,7 @@ def make(result=None, error=None, categories=CATEGORIES):
     )
     cog = Website(SimpleNamespace(website=website))
     interaction = SimpleNamespace(
-        response=SimpleNamespace(defer=AsyncMock()),
+        response=SimpleNamespace(defer=AsyncMock(), is_done=lambda: True),
         followup=SimpleNamespace(send=AsyncMock()),
         delete_original_response=AsyncMock(),
     )
