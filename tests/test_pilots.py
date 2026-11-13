@@ -432,3 +432,45 @@ async def test_empty_rank_roles_switch_rank_sync_off(env):
 def test_rank_roles_have_no_built_in_default(tmp_path):
     env = {k: v for k, v in BASE_ENV.items() if k != "FSA_RANK_ROLES"}
     assert load_settings(env={**env, "DATA_DIR": str(tmp_path)}).fsa_rank_roles == ()
+
+
+def sync_interaction():
+    message = SimpleNamespace(delete=AsyncMock())
+    interaction = MagicMock()
+    interaction.response.defer = AsyncMock()
+    interaction.response.is_done = MagicMock(return_value=True)
+    interaction.followup.send = AsyncMock(return_value=message)
+    return interaction, message
+
+
+async def test_sync_rank_replies(env):
+    from flyvikingbot.interactions import EPHEMERAL_SECONDS
+    from flyvikingbot.services.http import ServiceError
+
+    # Nothing changed: the confirmation removes itself
+    env.cog.sync_all = AsyncMock(return_value=([], 4))
+    interaction, message = sync_interaction()
+    await env.cog.sync_rank.callback(env.cog, interaction, member=None)
+    assert "No changes; 4 member(s)" in interaction.followup.send.await_args.args[0]
+    message.delete.assert_awaited_once_with(delay=EPHEMERAL_SECONDS)
+
+    # Changes stay so staff can read them
+    env.cog.sync_all = AsyncMock(return_value=(["<@1>: First Officer → Captain"], 3))
+    interaction, message = sync_interaction()
+    await env.cog.sync_rank.callback(env.cog, interaction, member=None)
+    reply = interaction.followup.send.await_args.args[0]
+    assert reply == "<@1>: First Officer → Captain\n3 member(s) already up to date."
+    message.delete.assert_not_awaited()
+
+    # Either service down: one error naming both, which stays
+    env.cog.sync_all = AsyncMock(side_effect=ServiceError("website down"))
+    interaction, message = sync_interaction()
+    await env.cog.sync_rank.callback(env.cog, interaction, member=None)
+    assert "FSAirlines or the website" in interaction.followup.send.await_args.args[0]
+    message.delete.assert_not_awaited()
+
+    # Anything unexpected still gets a reply instead of "thinking..." forever
+    env.cog.sync_all = AsyncMock(side_effect=RuntimeError("boom"))
+    interaction, _ = sync_interaction()
+    await env.cog.sync_rank.callback(env.cog, interaction, member=None)
+    assert "see the bot log" in interaction.followup.send.await_args.args[0]

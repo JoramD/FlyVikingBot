@@ -16,6 +16,7 @@ from discord.ext import commands, tasks
 
 from .. import linking as lk
 from ..constants import BRAND_COLOUR
+from ..interactions import fit_lines, reply_ephemeral
 from ..services.fsairlines import FsaNotFound, Pilot
 from ..services.http import ServiceError
 from ..services.website import member_group_ids
@@ -690,39 +691,63 @@ class Pilots(commands.Cog):
 
     # --- commands -----------------------------------------------------------------------------------------------------
 
-    @app_commands.command(name="sync_rank", description="Sync FSAirlines rank roles now (staff)")
+    @app_commands.command(name="sync_rank", description="Update rank roles and website rank groups from FSAirlines now")
     @app_commands.describe(member="Only sync this member (default: everyone linked)")
     @app_commands.default_permissions(manage_roles=True)
     @app_commands.guild_only()
     async def sync_rank(self, interaction: discord.Interaction, member: discord.Member | None = None) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
         if not self.rank_roles_enabled:
-            await interaction.followup.send("Rank roles are switched off (FSA_RANK_ROLES is empty).", ephemeral=True)
+            await reply_ephemeral(
+                interaction, ":x: Rank roles are switched off (FSA_RANK_ROLES is empty).", delete_after=None
+            )
             return
         try:
             if member is None:
                 changes, unchanged = await self.sync_all()
-                summary = "\n".join(changes) if changes else "No changes."
-                await interaction.followup.send(f"{summary}\n{unchanged} member(s) already up to date.", ephemeral=True)
+                if changes:
+                    log.info("/sync_rank by %s: %s", interaction.user, "; ".join(changes))
+                    # The change list stays so staff can read it; only "nothing to do" disappears
+                    await reply_ephemeral(
+                        interaction, fit_lines(changes, f"{unchanged} member(s) already up to date."),
+                        delete_after=None,
+                    )
+                else:
+                    await reply_ephemeral(
+                        interaction, f":white_check_mark: No changes; {unchanged} member(s) already up to date."
+                    )
                 return
             link, note = await self.ensure_link(member)
             if link is None:
-                msg = f"{member.mention} isn't linked to an FSAirlines pilot."
+                msg = f":x: {member.mention} isn't linked to an FSAirlines pilot."
                 if note:
                     msg += " Their website profile was found, but it's waiting for staff review in #system-messages."
-                await interaction.followup.send(msg, ephemeral=True)
+                await reply_ephemeral(interaction, msg, delete_after=None)
                 return
             pilot = await self.bot.fsa.pilot(link.external_id)
             change = await self.sync_ranks(
                 member, link.ips_member_id, pilot.rank_id, profile_url=link.ips_profile_url
             )
-            rank_name = await self.rank_name(pilot.rank_id) or pilot.rank or "unknown rank"
-            await interaction.followup.send(
-                change or f"{member.mention} is already up to date ({rank_name}).", ephemeral=True
-            )
+            if change:
+                log.info("/sync_rank by %s: %s", interaction.user, change)
+                await reply_ephemeral(interaction, change, delete_after=None)
+            else:
+                rank_name = await self.rank_name(pilot.rank_id) or pilot.rank or "unknown rank"
+                await reply_ephemeral(
+                    interaction, f":white_check_mark: {member.mention} is already up to date ({rank_name})."
+                )
         except ServiceError as exc:
+            # Rank sync talks to FSAirlines and the website; either can be down
             log.error("sync_rank failed: %s", exc)
-            await interaction.followup.send(":x: ERROR: Could not reach FSAirlines. Try again later.", ephemeral=True)
+            await reply_ephemeral(
+                interaction, ":x: ERROR: Could not reach FSAirlines or the website. Try again later.",
+                delete_after=None,
+            )
+        except Exception:
+            log.exception("sync_rank failed unexpectedly")
+            await reply_ephemeral(
+                interaction, ":x: ERROR: Something went wrong; see the bot log.", delete_after=None
+            )
 
     @app_commands.command(name="pilot", description="Show FSAirlines pilot statistics")
     @app_commands.describe(
