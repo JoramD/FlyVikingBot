@@ -125,3 +125,18 @@ async def test_download_categories_are_cached(api):
     assert await website.download_categories() == {1: ("Paints", None), 2: ("FlyViking", 1)}
     await website.download_categories()
     assert sum(r.startswith("/downloads/categories") for r in fake.requests) == 1
+
+
+async def test_member_list_is_cached_briefly(api, monkeypatch):
+    """Anyone can trigger on-demand lookups; one member scan serves them all for a minute."""
+    from flyvikingbot.services import website as website_module
+
+    fake = api[0]
+    fake.responses["/core/members"] = (200, {"page": 1, "totalPages": 1, "results": [{"id": 1}]})
+    website = client(api)
+    assert await website.list_members() == [{"id": 1}]
+    assert await website.list_members() == [{"id": 1}]
+    assert sum(r.startswith("/core/members") for r in fake.requests) == 1
+    monkeypatch.setattr(website_module, "MEMBER_CACHE_SECONDS", 0)
+    await website.list_members()
+    assert sum(r.startswith("/core/members") for r in fake.requests) == 2  # expired: fetched again

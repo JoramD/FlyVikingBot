@@ -199,6 +199,13 @@ async def test_blog_entry_other_blog_ignored(tmp_path):
     ch[100].send.assert_not_awaited()
 
 
+async def test_blog_entries_off_without_announcement_blog(tmp_path):
+    """No ANNOUNCEMENT_BLOG_ID: nothing is posted, so members' own blogs can't ping @everyone."""
+    cog, ch = make_cog(tmp_path, ANNOUNCEMENT_BLOG_ID="")
+    await cog.handle(ev.BLOG_ENTRY_CREATE, load_fixture("real_blogEntry_create"))
+    ch[100].send.assert_not_awaited()
+
+
 async def test_unknown_and_malformed_events_do_nothing(tmp_path):
     cog, ch = make_cog(tmp_path)
     await cog.on_ips_webhook("member_create", {"id": 1})

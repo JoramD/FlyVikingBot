@@ -26,7 +26,7 @@ Discord bot for the FlyViking virtual airline, connecting [flyviking.net](https:
 | IPS event | Discord |
 |---|---|
 | `galleryImage_create` | Full-size image upload in #screenshots, with "Uploaded by <author>" |
-| `blogEntry_create` | `@everyone` announcement embed in #announcements (excerpt, image, blog category) |
+| `blogEntry_create` | `@everyone` announcement embed in #announcements (excerpt, image, blog category); only for the blog in `ANNOUNCEMENT_BLOG_ID` |
 | `downloadsFile_create` | "New file available" embed in #announcements (author, description, screenshot, category, version) |
 | `downloads_new_version` | "New version available" embed in #announcements, the same as a new file plus the changelog |
 
@@ -119,7 +119,7 @@ Everything the bot needs outside this repository, in one place. Details follow i
    ```
    `<BOT_URL>` is `http://flyviking-bot:8080` on the shared Docker network.
    IPS also sends the event name in a `Webhook-Event` header, so a **single webhook** with all four events ticked, pointing at `<BOT_URL>/ips/<WEBHOOK_SECRET>`, works too. If an event is in the URL path, it takes precedence over the header.
-3. Set `ANNOUNCEMENT_BLOG_ID` (currently `1`) so that only entries from the announcements blog are posted.
+3. Set `ANNOUNCEMENT_BLOG_ID` (currently `1`). Only entries from that blog are posted; while it's empty, no blog entries are posted at all, so members' own blogs can never ping @everyone.
 4. With `WEBHOOK_CAPTURE=true` (off by default), every request is saved to `data/webhook_samples/`, with auth headers and member emails/IPs redacted. This is useful for checking what IPS actually sends.
 
 > **Delivery runs through IPS's background tasks.** Webhooks are queued and sent by the IPS **cron** task, not when the content is posted. As a result:

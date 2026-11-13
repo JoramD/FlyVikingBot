@@ -211,7 +211,11 @@ class WebsiteEvents(commands.Cog):
             if not entry:
                 return
             wanted = self.settings.announcement_blog_id
-            if wanted is not None and entry.blog_id != wanted:
+            if wanted is None:
+                # Off until set: otherwise members' own blogs would ping @everyone
+                log.info("ANNOUNCEMENT_BLOG_ID not set; not posting blog entry %r", entry.title)
+                return
+            if entry.blog_id != wanted:
                 log.info("Ignoring blog entry %r from blog %s", entry.title, entry.blog_id)
                 return
             channel = await self._channel(self.settings.channel_announcements, "CHANNEL_ANNOUNCEMENTS")
