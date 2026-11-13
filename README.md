@@ -7,10 +7,12 @@ Discord bot for the FlyViking virtual airline, connecting [flyviking.net](https:
 **Slash commands**
 - `/airline_statistics`: airline-wide statistics from FSAirlines
 - `/file_lookup <query>`: find a file (paint, configuration, ...) in the website's downloads
-- `/clear [amount] [minutes]`: delete the last 1–50 messages and/or those from the last N minutes, up to 24 hours (administrators only)
+- `/clear [amount] [minutes]`: delete the last 1–50 messages and/or those from the last N minutes, up to 24 hours (staff only)
 - `/pilot [member] [pilot]`: FSAirlines pilot stats. Shows rank, hours, flights, average rating, distance, passengers, cargo, location, last active and last flight. With no option it shows your own linked pilot. `pilot` accepts a callsign (`FVK003`) or a pilot ID.
-- `/sync_rank [member]`: sync FSAirlines rank roles right away (staff with Manage Roles only)
+- `/sync_rank [member]`: sync FSAirlines rank roles right away (staff only)
 - `/weather <airports> [frequencies]`: METAR, TAF, active runway, wind and ATIS for up to 3 airports (e.g. `EKCH ENGM`), from SayIntentions.AI. Results are cached for 5 minutes. Only available when the SayIntentions keys are set.
+
+*Staff* means Manage Roles (administrators have it), or the @Board of Directors role (`SYSTEM_MESSAGES_ROLE_ID`). The same rule applies to the Approve/Reject/Completed buttons. Discord hides staff commands from everyone else, and the bot checks again, so opening them to other roles under Server Settings → Integrations doesn't let non-staff use them. Board members without Manage Roles can press the buttons, but only see the staff commands if you allow the Board role under Server Settings → Integrations.
 
 **FSAirlines → Discord**
 - **#system-messages:** every post that needs staff action pings **@Board of Directors** (`SYSTEM_MESSAGES_ROLE_ID`). Informational posts, such as "✅ Linked", don't ping. Action posts without their own Approve/Reject buttons get a **Completed** button. When staff press it, the post records who completed it and when.

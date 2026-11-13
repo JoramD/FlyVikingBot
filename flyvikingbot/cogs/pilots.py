@@ -21,7 +21,7 @@ from ..services.fsairlines import FsaNotFound, Pilot
 from ..services.http import ServiceError
 from ..services.website import member_group_ids
 from ..storage import Link
-from ..system_messages import is_staff
+from ..system_messages import STAFF_ONLY_MESSAGE, is_staff, staff_only
 from ..webhooks import ips_events as ev
 from .flight_logs import flight_title, format_hours
 
@@ -369,7 +369,7 @@ class Pilots(commands.Cog):
 
     async def handle_review(self, interaction: discord.Interaction, action: str, ips_member_id: int) -> None:
         if not is_staff(interaction.user, self.settings.system_messages_role_id):
-            await interaction.response.send_message("Only staff can do this.", ephemeral=True)
+            await interaction.response.send_message(STAFF_ONLY_MESSAGE, ephemeral=True)
             return
         key = REVIEW_KEY.format(ips_member_id)
         raw = await self.bot.storage.kv_get(key)
@@ -722,8 +722,7 @@ class Pilots(commands.Cog):
 
     @app_commands.command(name="sync_rank", description="Update rank roles and website rank groups from FSAirlines now")
     @app_commands.describe(member="Only sync this member (default: everyone linked)")
-    @app_commands.default_permissions(manage_roles=True)
-    @app_commands.guild_only()
+    @staff_only()
     async def sync_rank(self, interaction: discord.Interaction, member: discord.Member | None = None) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
         if not self.rank_roles_enabled:

@@ -8,14 +8,16 @@ from typing import Any
 
 import aiohttp
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 from .config import Settings
+from .interactions import reply_ephemeral
 from .services.fsairlines import FsaClient
 from .services.sayintentions import SayIntentionsClient
 from .services.website import WebsiteClient
 from .storage import Storage
-from .system_messages import CompletedButton, completed_view
+from .system_messages import STAFF_ONLY_MESSAGE, CompletedButton, completed_view
 from .webhooks.server import WebhookServer
 
 log = logging.getLogger(__name__)
@@ -44,6 +46,7 @@ class FlyVikingBot(commands.Bot):
             allowed_mentions=discord.AllowedMentions.none(),
         )
         self.settings = settings
+        self.tree.error(self.on_app_command_error)
         self.http_session: aiohttp.ClientSession | None = None
         self.website: WebsiteClient | None = None
         self.fsa: FsaClient | None = None
@@ -124,6 +127,16 @@ class FlyVikingBot(commands.Bot):
         except discord.HTTPException:
             log.exception("Failed to post system message: %s", content)
             return None
+
+    async def on_app_command_error(
+        self, interaction: discord.Interaction, error: app_commands.AppCommandError
+    ) -> None:
+        """A failed check (only staff_only uses checks) gets a visible reply; anything else is logged."""
+        if isinstance(error, app_commands.CheckFailure):
+            await reply_ephemeral(interaction, STAFF_ONLY_MESSAGE, delete_after=None)
+            return
+        name = interaction.command.qualified_name if interaction.command else "?"
+        log.error("Error in /%s", name, exc_info=error)
 
     async def on_ready(self) -> None:
         log.info("Logged in as %s (%s)", self.user, getattr(self.user, "id", "?"))
