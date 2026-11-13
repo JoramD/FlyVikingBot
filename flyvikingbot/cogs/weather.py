@@ -24,7 +24,6 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 MAX_AIRPORTS = 3
-MAX_FREQUENCIES = 10
 FIELD_LIMIT = 1024  # Discord's embed field value limit
 _ICAO = re.compile(r"^[A-Z0-9]{4}$")
 _SEPARATORS = re.compile(r"[\s,;]+")
@@ -55,13 +54,63 @@ def code_block(text: str, limit: int = FIELD_LIMIT) -> str:
     return f"```\n{text}\n```"
 
 
+# SayIntentions frequency types, in the order a pilot uses them; unknown types follow, then "Other"
+FREQUENCY_TYPES = {
+    "ATIS": "ATIS", "CLR": "Delivery", "DEL": "Delivery", "GND": "Ground", "RMP": "Apron", "TWR": "Tower",
+    "DEP": "Departure", "APP": "Approach", "CTR": "Centre",
+}
+OTHER_FREQUENCIES = "Other"  # "AIR" (de-icing, airside) and anything without a type
+
+
+def _mhz(freq: str) -> str:
+    """'118.58' -> '118.580'."""
+    try:
+        return f"{float(freq):.3f}"
+    except ValueError:
+        return freq
+
+
+def _callsign(text: str) -> str:
+    """'KASTRUP FINAL' -> 'Kastrup Final', 'DE-ICING' -> 'De-icing'."""
+    return " ".join(word.capitalize() for word in text.split())
+
+
+def runways_text(weather: AirportWeather) -> tuple[str, str] | None:
+    """(field name, value) for the runways in use, or None."""
+    arriving, departing = weather.runways_arriving, weather.runways_departing
+    if arriving and arriving == departing:
+        return "Runway", arriving
+    if not (arriving or departing):
+        return None
+    parts = [f"Arriving {arriving}" if arriving else "", f"Departing {departing}" if departing else ""]
+    return "Runways", " · ".join(p for p in parts if p)
+
+
+def _frequency_label(kind: str | None) -> str:
+    kind = (kind or "").upper()
+    return FREQUENCY_TYPES.get(kind) or (kind if kind and kind != "AIR" else OTHER_FREQUENCIES)
+
+
 def frequency_lines(weather: AirportWeather) -> str | None:
-    lines = []
-    for f in weather.frequencies[:MAX_FREQUENCIES]:
-        line = f"{f.kind} {f.freq}" if f.kind else f.freq
-        lines.append(f"{line} ({f.callsign})" if f.callsign else line)
-    text = "\n".join(lines)
-    return text[:FIELD_LIMIT] or None
+    """One line per frequency type, e.g. '**Tower** 118.105 · 118.580 (Kastrup)', within one embed field."""
+    groups: dict[str, dict[str | None, list[str]]] = {}
+    for f in weather.frequencies:
+        callsign = _callsign(f.callsign) if f.callsign else None
+        groups.setdefault(_frequency_label(f.kind), {}).setdefault(callsign, []).append(_mhz(f.freq))
+    order = list(dict.fromkeys(FREQUENCY_TYPES.values()))
+
+    def rank(label: str) -> tuple[bool, int]:
+        return label == OTHER_FREQUENCIES, order.index(label) if label in order else len(order)
+
+    lines: list[str] = []
+    for label in sorted(groups, key=rank):
+        parts = [" · ".join(freqs) + (f" ({name})" if name else "") for name, freqs in groups[label].items()]
+        line = f"**{label}** " + " · ".join(parts)
+        if len("\n".join([*lines, line, "…"])) > FIELD_LIMIT:
+            lines.append("…")
+            break
+        lines.append(line)
+    return "\n".join(lines) or None
 
 
 def weather_embed(weather: AirportWeather, frequencies: bool = False) -> discord.Embed:
@@ -70,8 +119,8 @@ def weather_embed(weather: AirportWeather, frequencies: bool = False) -> discord
         embed.add_field(name="METAR", value=code_block(weather.metar), inline=False)
     if weather.taf:
         embed.add_field(name="TAF", value=code_block(weather.taf), inline=False)
-    if weather.active_runway:
-        embed.add_field(name="Active runway", value=weather.active_runway, inline=True)
+    if runways := runways_text(weather):
+        embed.add_field(name=runways[0], value=runways[1], inline=True)
     if weather.wind:
         embed.add_field(name="Wind", value=weather.wind, inline=True)
     if weather.atis:

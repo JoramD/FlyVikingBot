@@ -9,7 +9,9 @@ from flyvikingbot.cogs.weather import (
     InvalidAirports,
     Weather,
     code_block,
+    frequency_lines,
     parse_airports,
+    runways_text,
     weather_embed,
 )
 from flyvikingbot.services.http import ServiceError
@@ -43,19 +45,40 @@ def test_weather_embed_fields():
     embed = weather_embed(WX["EKCH"])
     fields = {f.name: f.value for f in embed.fields}
     assert embed.title == "EKCH" and embed.footer.text == "SayIntentions" and embed.timestamp
-    assert list(fields) == ["METAR", "TAF", "Active runway", "Wind", "ATIS"]  # no frequencies unless asked
-    assert fields["METAR"] == "```\nEKCH 131150Z 24012KT 9999 FEW030 09/04 Q1013 NOSIG\n```"
-    assert fields["Active runway"] == "22L" and fields["Wind"] == "240° at 12 kt"
+    assert list(fields) == ["METAR", "TAF", "Runways", "Wind", "ATIS"]  # no frequencies unless asked
+    assert fields["METAR"] == "```\nEKCH 132120Z AUTO 27012KT 9999 NCD 05/M00 Q1006 NOSIG\n```"
+    assert fields["Runways"] == "Arriving 22L · Departing 22R" and fields["Wind"] == "270° at 12 kt"
 
 
-def test_weather_embed_frequencies_and_missing_fields():
-    embed = weather_embed(WX["ENGM"], frequencies=True)
-    fields = {f.name: f.value for f in embed.fields}
-    assert "TAF" not in fields
-    assert fields["Frequencies"] == "Tower 118.300 (Gardermoen Tower)"
-    many = AirportWeather("EKCH", metar="x", frequencies=tuple(Frequency(None, f"1{i}", None) for i in range(15)))
-    lines = {f.name: f.value for f in weather_embed(many, True).fields}["Frequencies"].splitlines()
-    assert len(lines) == 10 and lines[0] == "10"
+def test_frequencies_grouped_by_type_in_pilot_order():
+    """The real EKCH capture: 22 frequencies in no particular order become one line per type."""
+    fields = {f.name: f.value for f in weather_embed(WX["EKCH"], frequencies=True).fields}
+    assert fields["Frequencies"].splitlines() == [
+        "**ATIS** 122.755 · 122.855",
+        "**Delivery** 119.905 (Kastrup)",
+        "**Ground** 121.630 · 121.905",
+        "**Apron** 121.730 (Kastrup Apron)",
+        "**Tower** 118.105 · 118.580 · 118.705 · 119.355 · 121.830 (Kastrup)",
+        "**Departure** 120.255 · 124.980 (Kastrup)",
+        "**Approach** 118.455 · 119.805 (Copenhagen) · 120.205 (Kastrup Final)",
+        "**Other** 123.405 · 130.655 · 131.655 · 131.690 · 131.980 (De-icing) · 131.405 (Airside)",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("arriving", "departing", "field"),
+    [("22L", "22R", ("Runways", "Arriving 22L · Departing 22R")), ("04L", "04L", ("Runway", "04L")),
+     ("22L", None, ("Runways", "Arriving 22L")), (None, None, None)],
+)
+def test_runways_text(arriving, departing, field):
+    assert runways_text(AirportWeather("EKCH", runways_arriving=arriving, runways_departing=departing)) == field
+
+
+def test_frequencies_fit_one_field_and_unknown_types_keep_their_code():
+    many = tuple(Frequency(f"T{i:02d}", f"1{i:02d}.000", "X" * 30) for i in range(60))
+    value = frequency_lines(AirportWeather("EKCH", metar="x", frequencies=many))
+    assert len(value) <= FIELD_LIMIT and value.endswith("\n…") and value.startswith("**T00** 100.000 (")
+    assert "Frequencies" not in {f.name for f in weather_embed(AirportWeather("EKCH", metar="x"), True).fields}
 
 
 def test_code_block_fits_a_field():
@@ -77,7 +100,8 @@ def make(result=None, error=None):
 
 
 async def test_weather_posts_one_embed_per_airport():
-    cog, interaction, client, _ = make(WX)
+    engm = AirportWeather("ENGM", metar="ENGM 132120Z 00000KT CAVOK")
+    cog, interaction, client, _ = make({**WX, "ENGM": engm})
     await cog.weather.callback(cog, interaction, "ENGM ekch")
     client.weather.assert_awaited_once_with(["ENGM", "EKCH"])
     call = interaction.followup.send.await_args

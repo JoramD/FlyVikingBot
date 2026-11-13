@@ -1,29 +1,52 @@
 {
   "airports": [
     {
+      "taf": "TAF EKCH 132027Z 1321/1421 28012KT 9999 FEW040 TEMPO 1406/1418 25015G25KT SCT030TCU TEMPO 1418/1421 23015G25KT",
+      "current": "D",
+      "preferred_runway_ga_departing": "22R",
+      "metar": "EKCH 132120Z AUTO 27012KT 9999 NCD 05/M00 Q1006 NOSIG",
+      "altimeter": "29.71",
+      "visibility": "10",
+      "atis_cpdlc": "COPENHAGEN KASTRUP ARPT, INFO DELTA. 2120Z. EXPECT ILS APCH. ARVG RWY 22L. DPTG RWY 22R. WIND 270 AT 12. VIS 10 KM. SKC. TEMP 5, DP 0. QNH 1006. TRL 70. ADVS ON INITIAL CTC YOU HAVE INFO DELTA.",
+      "closed_runways": "",
+      "active_runways_arriving": "22L",
+      "wind_speed": 12,
+      "wind_gusting": null,
+      "currently_operating": "south",
+      "wind_side": "he",
+      "density_altitude": -900,
       "airport": "EKCH",
-      "atis": "Kastrup information Alpha. Time 1150 Zulu. Expect ILS approach runway 22L. Departure runway 22R. Wind 240 degrees 12 knots. Visibility 10 kilometers or more. Temperature 9, dewpoint 4. QNH 1013. Advise on initial contact you have information Alpha.",
-      "atis_cpdlc": "EKCH ATIS A 1150Z EXP ILS RWY 22L DEP RWY 22R 24012KT 9999 FEW030 09/04 Q1013",
-      "metar": "EKCH 131150Z 24012KT 9999 FEW030 09/04 Q1013 NOSIG",
-      "taf": "TAF EKCH 131100Z 1312/1418 24012KT 9999 FEW030 BECMG 1400/1403 20008KT",
-      "active_runway": "22L",
-      "wind_direction": 240,
-      "wind_speed": 12
-    },
-    {
-      "airport": "ENGM",
-      "atis": "",
-      "atis_cpdlc": "ENGM ATIS B 1150Z RWY 01L 00000KT CAVOK 03/M02 Q1021",
-      "metar": "ENGM 131150Z 00000KT CAVOK 03/M02 Q1021 NOSIG",
-      "taf": null,
-      "active_runway": "01L",
-      "wind_direction": 0,
-      "wind_speed": 0
+      "time_zulu": "132120Z",
+      "active_runways_departing": "22R",
+      "preferred_runway_ga_arriving": "22L",
+      "wind_direction": 270,
+      "atis": "COPENHAGEN KASTRUP ARPT, INFO DELTA. 2120Z. EXPECT ILS APCH. ARVG RWY 22L. DPTG RWY 22R. WIND 270 AT 12. VIS 10 KM. SKC. TEMP 5, DP 0. QNH 1006. TRL 70. ADVS ON INITIAL CTC YOU HAVE INFO DELTA.",
+      "source": "live",
+      "runway_source": "internal"
     }
   ],
   "comms": [
-    {"type": "Tower", "freq": "118.100", "callsign": "Kastrup Tower", "airport": "EKCH"},
-    {"type": "Ground", "freq": "121.900", "callsign": "Kastrup Ground", "airport": "EKCH"},
-    {"type": "Tower", "freq": "118.300", "callsign": "Gardermoen Tower", "airport": "ENGM"}
+    {"type": "APP", "airport": "EKCH", "callsign": "COPENHAGEN", "freq": "118.455"},
+    {"callsign": "COPENHAGEN", "freq": "119.805", "type": "APP", "airport": "EKCH"},
+    {"freq": "120.205", "callsign": "KASTRUP FINAL", "airport": "EKCH", "type": "APP"},
+    {"callsign": null, "freq": "122.755", "airport": "EKCH", "type": "ATIS"},
+    {"callsign": null, "freq": "122.855", "airport": "EKCH", "type": "ATIS"},
+    {"callsign": "KASTRUP", "freq": "119.905", "type": "CLR", "airport": "EKCH"},
+    {"type": "DEP", "airport": "EKCH", "callsign": "KASTRUP", "freq": "120.255"},
+    {"callsign": "KASTRUP", "freq": "124.98", "airport": "EKCH", "type": "DEP"},
+    {"freq": "123.405", "callsign": "DE-ICING", "type": "AIR", "airport": "EKCH"},
+    {"airport": "EKCH", "type": "AIR", "callsign": "DE-ICING", "freq": "130.655"},
+    {"type": "AIR", "airport": "EKCH", "freq": "131.405", "callsign": "AIRSIDE"},
+    {"callsign": "DE-ICING", "freq": "131.655", "type": "AIR", "airport": "EKCH"},
+    {"freq": "131.69", "callsign": "DE-ICING", "type": "AIR", "airport": "EKCH"},
+    {"airport": "EKCH", "type": "AIR", "callsign": "DE-ICING", "freq": "131.98"},
+    {"freq": "121.73", "callsign": "KASTRUP APRON", "type": "RMP", "airport": "EKCH"},
+    {"type": "TWR", "airport": "EKCH", "freq": "118.105", "callsign": "KASTRUP"},
+    {"callsign": "KASTRUP", "freq": "118.58", "type": "TWR", "airport": "EKCH"},
+    {"freq": "118.705", "callsign": "KASTRUP", "airport": "EKCH", "type": "TWR"},
+    {"airport": "EKCH", "type": "TWR", "freq": "119.355", "callsign": "KASTRUP"},
+    {"airport": "EKCH", "type": "TWR", "freq": "121.83", "callsign": "KASTRUP"},
+    {"airport": "EKCH", "type": "GND", "freq": "121.63", "callsign": null},
+    {"freq": "121.905", "callsign": null, "type": "GND", "airport": "EKCH"}
   ]
 }

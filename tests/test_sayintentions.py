@@ -1,5 +1,4 @@
-"""SayIntentions client. The fixture follows the documented getWX example; replace it with a real
-capture (python -m flyvikingbot.tools.si_sample) once available."""
+"""SayIntentions client. The fixture is a real getWX capture for EKCH (tools/si_sample)."""
 
 import json
 from pathlib import Path
@@ -10,24 +9,29 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer
 
 from flyvikingbot.services.http import ServiceError
-from flyvikingbot.services.sayintentions import SayIntentionsClient, _wind, parse_weather
+from flyvikingbot.services.sayintentions import Frequency, SayIntentionsClient, _wind, parse_weather
 from flyvikingbot.tools.si_sample import scrub
 
 GETWX = json.loads((Path(__file__).parent / "fixtures" / "sayintentions" / "getWX.json").read_text(encoding="utf-8"))
 
 
-def test_parse_weather_fixture():
-    result = parse_weather(GETWX)
-    ekch, engm = result["EKCH"], result["ENGM"]
-    assert ekch.metar.startswith("EKCH 131150Z") and ekch.taf.startswith("TAF EKCH")
-    assert ekch.atis.startswith("Kastrup information Alpha")
-    assert ekch.active_runway == "22L" and ekch.wind == "240° at 12 kt"
-    assert [(f.kind, f.freq, f.callsign) for f in ekch.frequencies] == [
-        ("Tower", "118.100", "Kastrup Tower"), ("Ground", "121.900", "Kastrup Ground"),
-    ]
-    # Empty ATIS falls back to the CPDLC version; null TAF stays None
-    assert engm.atis.startswith("ENGM ATIS B") and engm.taf is None and engm.wind == "Calm"
-    assert len(engm.frequencies) == 1
+def test_parse_weather_real_capture():
+    ekch = parse_weather(GETWX)["EKCH"]
+    assert ekch.metar == "EKCH 132120Z AUTO 27012KT 9999 NCD 05/M00 Q1006 NOSIG"
+    assert ekch.taf.startswith("TAF EKCH 132027Z")
+    assert ekch.atis.startswith("COPENHAGEN KASTRUP ARPT, INFO DELTA.")
+    assert (ekch.runways_arriving, ekch.runways_departing) == ("22L", "22R")
+    assert ekch.wind == "270° at 12 kt"  # wind_gusting is null
+    assert len(ekch.frequencies) == 22
+    assert ekch.frequencies[0] == Frequency("APP", "118.455", "COPENHAGEN")
+    assert ekch.frequencies[3] == Frequency("ATIS", "122.755", None)
+
+
+def test_parse_weather_documented_fallbacks():
+    """The docs show active_runway (not the arriving/departing pair) and an empty atis with atis_cpdlc."""
+    w = parse_weather({"airports": [{"airport": "ENGM", "active_runway": "01L", "atis": "", "atis_cpdlc": "ENGM B"}]})
+    engm = w["ENGM"]
+    assert (engm.runways_arriving, engm.runways_departing) == ("01L", "01L") and engm.atis == "ENGM B"
 
 
 @pytest.mark.parametrize("data", [None, [], "error", {"airports": "x"}, {"airports": [None, {"metar": "x"}]}])
@@ -47,6 +51,12 @@ def test_parse_weather_missing_fields():
 )
 def test_wind(direction, speed, text):
     assert _wind(direction, speed) == text
+
+
+@pytest.mark.parametrize(("gust", "text"), [(25, "250° at 15 kt, gusting 25 kt"), (None, "250° at 15 kt"),
+                                            (15, "250° at 15 kt"), ("x", "250° at 15 kt")])
+def test_wind_gusts(gust, text):
+    assert _wind(250, 15, gust) == text
 
 
 def test_sample_tool_scrubs_keys():
@@ -83,7 +93,7 @@ async def si():
 async def test_weather_request_carries_both_keys(si):
     fake, client = si
     result = await client.weather(["EKCH", "ENGM"])
-    assert set(result) == {"EKCH", "ENGM"}
+    assert set(result) == {"EKCH"}  # the capture only has EKCH, so ENGM counts as not found
     request = fake.requests[0]
     assert request.headers["X-Developer-Key"] == "app-key"
     assert request.query["api_key"] == "account-key"

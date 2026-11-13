@@ -25,9 +25,9 @@ WEATHER_CACHE_SECONDS = 300  # the docs ask integrations to cache weather
 
 @dataclass(frozen=True)
 class Frequency:
-    kind: str | None  # e.g. "Tower"
-    freq: str  # e.g. "118.100"
-    callsign: str | None  # e.g. "Kastrup Tower"
+    kind: str | None  # SayIntentions type code, e.g. "TWR", "GND", "APP", "AIR"
+    freq: str  # e.g. "118.58"
+    callsign: str | None  # e.g. "KASTRUP"; often missing for ATIS and ground
 
 
 @dataclass(frozen=True)
@@ -36,13 +36,14 @@ class AirportWeather:
     metar: str | None = None
     taf: str | None = None
     atis: str | None = None
-    active_runway: str | None = None
+    runways_arriving: str | None = None
+    runways_departing: str | None = None
     wind: str | None = None
     frequencies: tuple[Frequency, ...] = ()
 
     @property
     def is_empty(self) -> bool:
-        return not any((self.metar, self.taf, self.atis, self.active_runway, self.wind))
+        return not any((self.metar, self.taf, self.atis, self.runways_arriving, self.runways_departing, self.wind))
 
 
 def _str(value: Any) -> str | None:
@@ -52,14 +53,19 @@ def _str(value: Any) -> str | None:
     return text or None
 
 
-def _wind(direction: Any, speed: Any) -> str | None:
-    """'240° at 12 kt', 'Variable at 3 kt', 'Calm'; None when SayIntentions gives nothing usable."""
-    speed_text = _str(speed)
-    if speed_text is None:
-        return None
+def _knots(value: Any) -> int | None:
+    text = _str(value)
     try:
-        knots = round(float(speed_text))
+        return round(float(text)) if text else None
     except ValueError:
+        return None
+
+
+def _wind(direction: Any, speed: Any, gust: Any = None) -> str | None:
+    """'240° at 12 kt', '250° at 15 kt, gusting 25 kt', 'Variable at 3 kt', 'Calm';
+    None when SayIntentions gives nothing usable."""
+    knots = _knots(speed)
+    if knots is None:
         return None
     if knots == 0:
         return "Calm"
@@ -68,7 +74,9 @@ def _wind(direction: Any, speed: Any) -> str | None:
         heading = f"{(round(float(dir_text)) % 360) or 360:03d}°" if dir_text else None  # north is 360
     except ValueError:
         heading = "Variable" if dir_text.upper().startswith("VR") else None
-    return f"{heading} at {knots} kt" if heading else f"{knots} kt"
+    text = f"{heading} at {knots} kt" if heading else f"{knots} kt"
+    gusts = _knots(gust)
+    return f"{text}, gusting {gusts} kt" if gusts and gusts > knots else text
 
 
 def parse_weather(data: Any) -> dict[str, AirportWeather]:
@@ -89,8 +97,10 @@ def parse_weather(data: Any) -> dict[str, AirportWeather]:
             metar=_str(a.get("metar")),
             taf=_str(a.get("taf")),
             atis=_str(a.get("atis")) or _str(a.get("atis_cpdlc")),
-            active_runway=_str(a.get("active_runway")),
-            wind=_wind(a.get("wind_direction"), a.get("wind_speed")),
+            # The live API sends separate arriving/departing runways; the docs only mention active_runway
+            runways_arriving=_str(a.get("active_runways_arriving")) or _str(a.get("active_runway")),
+            runways_departing=_str(a.get("active_runways_departing")) or _str(a.get("active_runway")),
+            wind=_wind(a.get("wind_direction"), a.get("wind_speed"), a.get("wind_gusting")),
             frequencies=tuple(comms.get(icao, ())),
         )
     return result
