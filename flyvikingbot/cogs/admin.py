@@ -8,6 +8,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from ..interactions import reply_ephemeral
+
 if TYPE_CHECKING:
     from ..bot import FlyVikingBot
 
@@ -25,14 +27,14 @@ class Admin(commands.Cog):
         await interaction.response.defer(ephemeral=True, thinking=True)
         channel = interaction.channel
         if not isinstance(channel, (discord.TextChannel, discord.Thread, discord.VoiceChannel)):
-            await interaction.followup.send(":x: ERROR: Can't clear messages here.", ephemeral=True)
+            await reply_ephemeral(interaction, ":x: ERROR: Can't clear messages here.")
             return
         try:
             deleted = await channel.purge(limit=amount, reason=f"/clear by {interaction.user}")
         except discord.Forbidden:
-            await interaction.followup.send(":x: ERROR: I lack permission to delete messages here.", ephemeral=True)
+            await reply_ephemeral(interaction, ":x: ERROR: I lack permission to delete messages here.")
             return
-        await interaction.followup.send(f":white_check_mark: Deleted {len(deleted)} messages.", ephemeral=True)
+        await reply_ephemeral(interaction, f":white_check_mark: Deleted {len(deleted)} messages.")
 
 
 async def setup(bot: FlyVikingBot) -> None:
