@@ -11,6 +11,7 @@ import html
 import logging
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -26,6 +27,16 @@ MEMBER_EVENTS = frozenset({MEMBER_EDITED, MEMBER_REGISTRATION_COMPLETE})
 
 
 _IMG_SRC = re.compile(r"<img[^>]+src=[\"']([^\"']+)[\"']", re.IGNORECASE)
+_TAG = re.compile(r"<[^>]+>")
+
+
+@dataclass(frozen=True)
+class Author:
+    """Who posted something on the website."""
+
+    name: str
+    profile_url: str | None
+    avatar_url: str | None  # None for IPS's generated letter avatar
 
 
 @dataclass(frozen=True)
@@ -34,6 +45,7 @@ class GalleryImage:
 
     url: str | None  # the image's gallery page
     image_url: str  # the image file itself (large version if available)
+    author: Author | None = None
 
 
 @dataclass(frozen=True)
@@ -44,6 +56,10 @@ class BlogEntry:
     url: str
     blog_id: int | None
     image_url: str | None
+    author: Author | None = None
+    excerpt: str | None = None
+    category: str | None = None
+    date: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -53,6 +69,12 @@ class DownloadsFile:
     title: str | None
     url: str
     version: str | None
+    author: Author | None = None
+    excerpt: str | None = None
+    category: str | None = None
+    image_url: str | None = None  # primary screenshot
+    changelog: str | None = None
+    date: datetime | None = None
 
 
 def unwrap(payload: Any) -> dict[str, Any]:
@@ -94,13 +116,51 @@ def _missing(event: str, field: str, data: dict[str, Any]) -> None:
     log.warning("%s payload has no usable %r (keys: %s)", event, field, sorted(data))
 
 
+def _date(value: Any) -> datetime | None:
+    """IPS dates are ISO 8601 in UTC, e.g. '2026-11-12T18:55:53Z'."""
+    if not (text := _str(value)):
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def plain_text(value: Any) -> str | None:
+    """HTML from the website as a single line of plain text (None if empty)."""
+    if not (text := _str(value)):
+        return None
+    return " ".join(html.unescape(_TAG.sub(" ", text)).split()) or None
+
+
+def excerpt(value: Any, limit: int = 300) -> str | None:
+    """The start of an HTML text as plain text, cut at a word boundary."""
+    if not (text := plain_text(value)):
+        return None
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 1]
+    if " " in cut:
+        cut = cut.rsplit(" ", 1)[0]
+    return cut.rstrip(" ,.;:") + "…"
+
+
+def parse_author(data: dict[str, Any]) -> Author | None:
+    author = data.get("author")
+    if not isinstance(author, dict) or not (name := _str(author.get("name"))):
+        return None
+    avatar = None if author.get("photoUrlIsDefault") else _str(author.get("photoUrl"))
+    return Author(name=name, profile_url=_str(author.get("profileUrl")), avatar_url=avatar)
+
+
 def parse_gallery_image(payload: Any) -> GalleryImage | None:
     data = unwrap(payload)
     image_url = _first(_nested(data, "images", "large"), _nested(data, "images", "original"))
     if not image_url:
         _missing(GALLERY_IMAGE_CREATE, "images", data)
         return None
-    return GalleryImage(url=_str(data.get("url")), image_url=image_url)
+    return GalleryImage(url=_str(data.get("url")), image_url=image_url, author=parse_author(data))
 
 
 def parse_blog_entry(payload: Any) -> BlogEntry | None:
@@ -115,7 +175,16 @@ def parse_blog_entry(payload: Any) -> BlogEntry | None:
     body = _str(data.get("entry"))
     if not image_url and body and (match := _IMG_SRC.search(body)):
         image_url = match.group(1)
-    return BlogEntry(title=title, url=url, blog_id=blog_id, image_url=image_url)
+    return BlogEntry(
+        title=title,
+        url=url,
+        blog_id=blog_id,
+        image_url=image_url,
+        author=parse_author(data),
+        excerpt=excerpt(body),
+        category=_first(_nested(data, "category", "name"), _nested(data, "blog", "name")),
+        date=_date(data.get("date")),
+    )
 
 
 def parse_downloads_file(payload: Any, event: str = DOWNLOADS_FILE_CREATE) -> DownloadsFile | None:
@@ -124,12 +193,22 @@ def parse_downloads_file(payload: Any, event: str = DOWNLOADS_FILE_CREATE) -> Do
     if not url:
         _missing(event, "url", data)
         return None
-    return DownloadsFile(title=_str(data.get("title")), url=url, version=_str(data.get("version")))
+    screenshots = data.get("screenshots")
+    first_screenshot = screenshots[0] if isinstance(screenshots, list) and screenshots else None
+    return DownloadsFile(
+        title=_str(data.get("title")),
+        url=url,
+        version=_str(data.get("version")),
+        author=parse_author(data),
+        excerpt=excerpt(data.get("description")),
+        category=_str(_nested(data, "category", "name")),
+        image_url=_first(data.get("primaryScreenshot"), first_screenshot),
+        changelog=excerpt(data.get("changelog"), limit=1000),
+        date=_date(data.get("updated")) or _date(data.get("date")),
+    )
 
 
 # --- members ------------------------------------------------------------------
-
-_TAG = re.compile(r"<[^>]+>")
 
 
 @dataclass(frozen=True)
@@ -155,10 +234,7 @@ def _custom_field(data: dict[str, Any], field_id: int | None) -> str | None:
         fields = group.get("fields") if isinstance(group, dict) else None
         if isinstance(fields, dict) and isinstance(field := fields.get(str(field_id)), dict):
             value = field.get("value")
-            if value is None:
-                return None
-            text = html.unescape(_TAG.sub(" ", str(value)))
-            return " ".join(text.split()) or None
+            return None if value is None else plain_text(str(value))
     return None
 
 

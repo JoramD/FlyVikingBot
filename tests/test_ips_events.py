@@ -47,6 +47,52 @@ def test_downloads_file_and_new_version():
     assert new.url == file.url and new.version == "2.0.0"
 
 
+def test_author_from_real_payloads():
+    gallery = ev.parse_gallery_image(load_fixture("real_galleryImage_create"))
+    assert gallery.author.name == "Alexhs2"
+    assert gallery.author.profile_url == "https://flyviking.net/profile/3-alexhs2/"
+    assert gallery.author.avatar_url and "fluttershy" in gallery.author.avatar_url
+    for name, parse in (("real_blogEntry_create", ev.parse_blog_entry),
+                        ("real_downloadsFile_create", ev.parse_downloads_file)):
+        assert parse(load_fixture(name)).author.name == "JoramD"
+
+
+def test_default_avatar_and_missing_author():
+    payload = load_fixture("real_galleryImage_create")
+    payload["author"]["photoUrlIsDefault"] = True
+    assert ev.parse_gallery_image(payload).author.avatar_url is None
+    payload["author"] = {"id": 0, "name": ""}  # guest / deleted member
+    assert ev.parse_gallery_image(payload).author is None
+
+
+def test_excerpt():
+    assert ev.excerpt("<p>Hello&nbsp;<b>pilots</b></p>\n<p>Welcome</p>") == "Hello pilots Welcome"
+    assert ev.excerpt("") is None and ev.excerpt("<p> </p>") is None and ev.excerpt(None) is None
+    long = "<p>" + "word " * 100 + "</p>"
+    cut = ev.excerpt(long, limit=50)
+    assert len(cut) <= 50 and cut.endswith("word…")
+
+
+def test_blog_and_file_details():
+    entry = ev.parse_blog_entry(load_fixture("real_blogEntry_create"))
+    assert entry.excerpt == "9" and entry.category == "Announcement"
+    assert entry.date.isoformat() == "2026-11-12T18:55:53+00:00"
+    file = ev.parse_downloads_file(load_fixture("real_downloadsFile_create"))
+    assert file.excerpt == "This is a test" and file.category == "GSX Configurations"
+    assert file.image_url is None and file.changelog is None  # changelog: null
+    new = ev.parse_downloads_file(load_fixture("real_downloads_new_version"), ev.DOWNLOADS_NEW_VERSION)
+    assert new.changelog is None  # changelog: ""
+    assert new.date.isoformat() == "2026-11-12T18:53:45+00:00"  # the update time, not the first upload
+
+
+def test_file_screenshot_fallback():
+    payload = load_fixture("real_downloadsFile_create")
+    payload["screenshots"] = ["https://flyviking.net/uploads/a.png", "https://flyviking.net/uploads/b.png"]
+    assert ev.parse_downloads_file(payload).image_url == "https://flyviking.net/uploads/a.png"
+    payload["primaryScreenshot"] = "https://flyviking.net/uploads/main.png"
+    assert ev.parse_downloads_file(payload).image_url == "https://flyviking.net/uploads/main.png"
+
+
 def test_member_envelope_unwrapped():
     body = load_fixture("real_member_edited")
     assert ev.unwrap(body)["id"] == 3

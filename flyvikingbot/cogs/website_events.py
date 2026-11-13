@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import logging
 import posixpath
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
@@ -22,6 +23,8 @@ log = logging.getLogger(__name__)
 
 # Discord's upload limit for bots in non-boosted servers is 10 MiB; leave headroom
 MAX_UPLOAD_BYTES = 9 * 1024 * 1024
+SITE_NAME = "flyviking.net"
+NO_MENTIONS = discord.AllowedMentions.none()
 
 
 def _filename(url: str) -> str:
@@ -30,11 +33,64 @@ def _filename(url: str) -> str:
     return "".join(c if c.isalnum() or c in "-_." else "_" for c in name)[-100:]
 
 
-def announcement_embed(entry: ev.BlogEntry) -> discord.Embed:
-    embed = discord.Embed(title=entry.title, url=entry.url, colour=BRAND_COLOUR)
-    if entry.image_url:
-        embed.set_thumbnail(url=entry.image_url)
+def website_embed(
+    *,
+    title: str,
+    url: str,
+    author: ev.Author | None = None,
+    description: str | None = None,
+    image_url: str | None = None,
+    category: str | None = None,
+    date: datetime | None = None,
+) -> discord.Embed:
+    """The shared layout for website posts: author, linked title, excerpt, large image, category footer."""
+    embed = discord.Embed(
+        title=title[:256], url=url, description=description, colour=BRAND_COLOUR, timestamp=date
+    )
+    if author:
+        embed.set_author(name=author.name[:256], url=author.profile_url, icon_url=author.avatar_url)
+    if image_url:
+        embed.set_image(url=image_url)
+    embed.set_footer(text=" · ".join(filter(None, [category, SITE_NAME])))
     return embed
+
+
+def announcement_embed(entry: ev.BlogEntry) -> discord.Embed:
+    return website_embed(
+        title=entry.title,
+        url=entry.url,
+        author=entry.author,
+        description=entry.excerpt,
+        image_url=entry.image_url,
+        category=entry.category,
+        date=entry.date,
+    )
+
+
+def file_embed(file: ev.DownloadsFile, *, new_version: bool) -> discord.Embed:
+    embed = website_embed(
+        title=file.title or "Untitled file",
+        url=file.url,
+        author=file.author,
+        description=file.excerpt,
+        image_url=file.image_url,
+        category=file.category,
+        date=file.date,
+    )
+    if file.version:
+        embed.add_field(name="Version", value=file.version[:1024])
+    if new_version and file.changelog:
+        embed.add_field(name="Changes", value=file.changelog[:1024], inline=False)
+    return embed
+
+
+def author_line(author: ev.Author | None) -> str | None:
+    """'Uploaded by <name>' with the profile linked. The <> stops Discord previewing the link, so the
+    uploaded image stays full size."""
+    if author is None:
+        return None
+    name = discord.utils.escape_markdown(author.name)
+    return f"Uploaded by [{name}](<{author.profile_url}>)" if author.profile_url else f"Uploaded by {name}"
 
 
 class WebsiteEvents(commands.Cog):
@@ -97,11 +153,17 @@ class WebsiteEvents(commands.Cog):
             channel = await self._channel(self.settings.channel_screenshots, "CHANNEL_SCREENSHOTS") if image else None
             if image and channel:
                 # Upload the image ourselves: Discord can't always unfurl flyviking.net links
+                line = author_line(image.author)
                 data = await self._fetch_image(image.image_url)
                 if data:
-                    await channel.send(file=discord.File(io.BytesIO(data), filename=_filename(image.image_url)))
+                    await channel.send(
+                        line,
+                        file=discord.File(io.BytesIO(data), filename=_filename(image.image_url)),
+                        allowed_mentions=NO_MENTIONS,
+                    )
                 else:
-                    await channel.send(image.image_url)
+                    text = f"{line}\n{image.image_url}" if line else image.image_url
+                    await channel.send(text, allowed_mentions=NO_MENTIONS)
 
         elif event == ev.BLOG_ENTRY_CREATE:
             entry = ev.parse_blog_entry(payload)
@@ -120,17 +182,16 @@ class WebsiteEvents(commands.Cog):
                 allowed_mentions=discord.AllowedMentions(everyone=True, users=False, roles=False),
             )
 
-        elif event == ev.DOWNLOADS_FILE_CREATE:
+        elif event in (ev.DOWNLOADS_FILE_CREATE, ev.DOWNLOADS_NEW_VERSION):
+            new_version = event == ev.DOWNLOADS_NEW_VERSION
             if (file := ev.parse_downloads_file(payload, event)) and (
                 channel := await self._channel(self.settings.channel_announcements, "CHANNEL_ANNOUNCEMENTS")
             ):
-                await channel.send(f"## [New file available!]({file.url})")
-
-        elif event == ev.DOWNLOADS_NEW_VERSION:
-            if (file := ev.parse_downloads_file(payload, event)) and (
-                channel := await self._channel(self.settings.channel_announcements, "CHANNEL_ANNOUNCEMENTS")
-            ):
-                await channel.send(f"## [New file version available!]({file.url})")
+                await channel.send(
+                    "New version available" if new_version else "New file available",
+                    embed=file_embed(file, new_version=new_version),
+                    allowed_mentions=NO_MENTIONS,
+                )
 
         elif event not in ev.MEMBER_EVENTS:  # member events are handled by the pilots cog
             log.info("Ignoring unhandled webhook event %s", event)

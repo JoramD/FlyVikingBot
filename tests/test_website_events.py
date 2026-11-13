@@ -30,8 +30,12 @@ async def test_gallery_uploads_image_as_attachment(tmp_path):
     await cog.handle(ev.GALLERY_IMAGE_CREATE, load_fixture("real_galleryImage_create"))
     cog._fetch_image.assert_awaited_once()
     assert "/large.Screenshot" in cog._fetch_image.await_args.args[0]
-    file = ch[200].send.await_args.kwargs["file"]
+    call = ch[200].send.await_args
+    file = call.kwargs["file"]
     assert file.filename.startswith("large.Screenshot") and file.filename.endswith(".png")
+    # Author line with the profile link wrapped in <> so Discord doesn't add a preview
+    assert call.args[0] == "Uploaded by [Alexhs2](<https://flyviking.net/profile/3-alexhs2/>)"
+    assert call.kwargs["allowed_mentions"].everyone is False
     ch[100].send.assert_not_awaited()
 
 
@@ -39,7 +43,19 @@ async def test_gallery_falls_back_to_link_when_download_fails(tmp_path):
     cog, ch = make_cog(tmp_path)  # http_session=None -> no download possible
     await cog.handle(ev.GALLERY_IMAGE_CREATE, load_fixture("real_galleryImage_create"))
     ch[200].send.assert_awaited_once()
-    assert "/large.Screenshot" in ch[200].send.await_args.args[0]
+    text = ch[200].send.await_args.args[0]
+    line, url = text.split("\n")
+    assert line.startswith("Uploaded by [Alexhs2]")
+    assert "/large.Screenshot" in url
+
+
+async def test_gallery_without_author_posts_image_only(tmp_path):
+    cog, ch = make_cog(tmp_path)
+    cog._fetch_image = AsyncMock(return_value=b"\x89PNG fake")
+    payload = load_fixture("real_galleryImage_create")
+    del payload["author"]
+    await cog.handle(ev.GALLERY_IMAGE_CREATE, payload)
+    assert ch[200].send.await_args.args[0] is None
 
 
 @pytest.fixture
@@ -62,13 +78,13 @@ async def test_fetch_image_against_server(tmp_path, image_server, monkeypatch):
     assert await cog._fetch_image("http://127.0.0.1:1/x.png") is None  # unreachable
 
 
-async def test_blog_entry_with_image_gets_thumbnail(tmp_path):
+async def test_blog_entry_with_image_gets_large_image(tmp_path):
     cog, ch = make_cog(tmp_path, ANNOUNCEMENT_BLOG_ID="1")
     payload = load_fixture("real_blogEntry_create")
     payload["image"] = "https://flyviking.net/uploads/cover.jpg"
     await cog.handle(ev.BLOG_ENTRY_CREATE, payload)
     call = ch[100].send.await_args
-    assert call.kwargs["embed"].thumbnail.url == "https://flyviking.net/uploads/cover.jpg"
+    assert call.kwargs["embed"].image.url == "https://flyviking.net/uploads/cover.jpg"
     assert call.kwargs["allowed_mentions"].everyone is True
 
 
@@ -76,20 +92,54 @@ async def test_real_ips_blog_entry_payload(tmp_path):
     cog, ch = make_cog(tmp_path, ANNOUNCEMENT_BLOG_ID="1")
     await cog.handle(ev.BLOG_ENTRY_CREATE, load_fixture("real_blogEntry_create"))
     call = ch[100].send.await_args
+    embed = call.kwargs["embed"]
     assert call.args[0] == "@everyone"
-    assert call.kwargs["embed"].title == "Test9"
-    assert call.kwargs["embed"].url == "https://flyviking.net/blogs/entry/21-test9/"
-    assert call.kwargs["embed"].thumbnail.url is None
+    assert embed.title == "Test9"
+    assert embed.url == "https://flyviking.net/blogs/entry/21-test9/"
+    assert embed.description == "9"
+    assert embed.author.name == "JoramD"
+    assert embed.author.url == "https://flyviking.net/profile/1-joramd/"
+    assert embed.footer.text == "Announcement · flyviking.net"
+    assert embed.timestamp is not None and embed.timestamp.year == 2026
+    assert embed.image.url is None
 
 
 @pytest.mark.parametrize(
     ("event", "text"),
-    [(ev.DOWNLOADS_FILE_CREATE, "New file available!"), (ev.DOWNLOADS_NEW_VERSION, "New file version available!")],
+    [(ev.DOWNLOADS_FILE_CREATE, "New file available"), (ev.DOWNLOADS_NEW_VERSION, "New version available")],
 )
 async def test_real_ips_downloads_payloads(tmp_path, event, text):
     cog, ch = make_cog(tmp_path)
     await cog.handle(event, load_fixture(f"real_{event}"))
-    assert ch[100].send.await_args.args[0] == f"## [{text}](https://flyviking.net/files/file/34-test/)"
+    call = ch[100].send.await_args
+    embed = call.kwargs["embed"]
+    assert call.args[0] == text
+    assert call.kwargs["allowed_mentions"].everyone is False
+    assert embed.title == "Test"
+    assert embed.url == "https://flyviking.net/files/file/34-test/"
+    assert embed.description == "This is a test"
+    assert embed.author.name == "JoramD"
+    assert embed.footer.text == "GSX Configurations · flyviking.net"
+    assert [f.name for f in embed.fields] == ["Version"]  # the fixture's changelog is empty
+
+
+async def test_new_version_shows_changelog_and_screenshot(tmp_path):
+    cog, ch = make_cog(tmp_path)
+    payload = load_fixture("real_downloads_new_version")
+    payload["changelog"] = "<p>Fixed the <b>doors</b></p>"
+    payload["primaryScreenshot"] = "https://flyviking.net/uploads/shot.png"
+    await cog.handle(ev.DOWNLOADS_NEW_VERSION, payload)
+    embed = ch[100].send.await_args.kwargs["embed"]
+    assert {f.name: f.value for f in embed.fields} == {"Version": "2.0.0", "Changes": "Fixed the doors"}
+    assert embed.image.url == "https://flyviking.net/uploads/shot.png"
+
+
+async def test_new_file_does_not_show_changelog(tmp_path):
+    cog, ch = make_cog(tmp_path)
+    payload = load_fixture("real_downloadsFile_create")
+    payload["changelog"] = "<p>Old notes</p>"
+    await cog.handle(ev.DOWNLOADS_FILE_CREATE, payload)
+    assert [f.name for f in ch[100].send.await_args.kwargs["embed"].fields] == ["Version"]
 
 
 async def test_blog_entry_other_blog_ignored(tmp_path):
