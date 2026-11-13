@@ -32,3 +32,11 @@ def test_fsa_va_id_required_and_channels_optional(tmp_path):
         load_settings(env={**env, "DATA_DIR": str(tmp_path)})
     s = load_settings(env={**env, "FSA_VA_ID": "42982", "DATA_DIR": str(tmp_path)})
     assert s.channel_announcements is None and s.channel_screenshots is None  # no built-in IDs
+
+
+def test_sayintentions_keys_optional(settings, tmp_path):
+    assert settings.sayintentions_app_key is None and settings.sayintentions_account_key is None
+    assert settings.sayintentions_va_key is None
+    s = load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path), "SAYINTENTIONS_APP_KEY": "app",
+                           "SAYINTENTIONS_ACCOUNT_KEY": "account", "SAYINTENTIONS_VA_KEY": "va"})
+    assert (s.sayintentions_app_key, s.sayintentions_account_key, s.sayintentions_va_key) == ("app", "account", "va")

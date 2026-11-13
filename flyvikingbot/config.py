@@ -49,6 +49,11 @@ class Settings:
     website_member_group: str  # primary group for pilots on an automatic rank
     website_protected_groups: tuple[str, ...]  # primary groups the bot never changes
 
+    # SayIntentions.AI (/weather is off unless both the app key and the account key are set)
+    sayintentions_app_key: str | None  # identifies this bot as an application (sent as X-Developer-Key)
+    sayintentions_account_key: str | None  # identifies the SayIntentions account the bot uses (sent as api_key)
+    sayintentions_va_key: str | None  # FlyViking's VA-Link key; reserved for crew personas (not used yet)
+
     data_dir: Path
 
     @property
@@ -127,5 +132,8 @@ def load_settings(
         fsa_rank_roles=tuple(
             name.strip() for name in (get("FSA_RANK_ROLES") or "").split(",") if name.strip()
         ),
+        sayintentions_app_key=get("SAYINTENTIONS_APP_KEY"),
+        sayintentions_account_key=get("SAYINTENTIONS_ACCOUNT_KEY"),
+        sayintentions_va_key=get("SAYINTENTIONS_VA_KEY"),
         data_dir=Path(get("DATA_DIR", "data")),
     )

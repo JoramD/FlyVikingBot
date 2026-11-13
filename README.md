@@ -10,6 +10,7 @@ Discord bot for the FlyViking virtual airline, connecting [flyviking.net](https:
 - `/clear [amount] [minutes]`: delete the last 1–50 messages and/or those from the last N minutes, up to 24 hours (administrators only)
 - `/pilot [member] [pilot]`: FSAirlines pilot stats. Shows rank, hours, flights, average rating, distance, passengers, cargo, location, last active and last flight. With no option it shows your own linked pilot. `pilot` accepts a callsign (`FVK003`) or a pilot ID.
 - `/sync_rank [member]`: sync FSAirlines rank roles right away (staff with Manage Roles only)
+- `/weather <airports> [frequencies]`: METAR, TAF, active runway, wind and ATIS for up to 3 airports (e.g. `EKCH ENGM`), from SayIntentions.AI. Results are cached for 5 minutes. Only available when the SayIntentions keys are set.
 
 **FSAirlines → Discord**
 - **#system-messages:** every post that needs staff action pings **@Board of Directors** (`SYSTEM_MESSAGES_ROLE_ID`). Informational posts, such as "✅ Linked", don't ping. Action posts without their own Approve/Reject buttons get a **Completed** button. When staff press it, the post records who completed it and when.
@@ -89,6 +90,13 @@ Everything the bot needs outside this repository, in one place. Details follow i
 **FSAirlines**
 - [ ] API key (VA Overview → Edit VA Settings → Api Key Management) in `FSA_API_KEY`. A *site* key locks to the first IP that uses it 100 times, so only use it from the server.
 
+**SayIntentions.AI** (optional; for `/weather`)
+- [ ] Sign in to the SayIntentions pilot portal with FlyViking's account (it needs an active subscription).
+- [ ] **Developer Key** page: request a *personal* developer key. It identifies the bot and goes in `SAYINTENTIONS_APP_KEY`.
+- [ ] **Account** page: copy the "API Key (ACARS ID)". It identifies the account the bot uses and goes in `SAYINTENTIONS_ACCOUNT_KEY`.
+- [ ] Optional: FlyViking's VA-Link key from SayIntentions support in `SAYINTENTIONS_VA_KEY`. Not used yet; reserved for crew personas.
+- [ ] Check the response format once: `docker compose exec bot python -m flyvikingbot.tools.si_sample EKCH` saves a real reply to `data/sayintentions_samples/getWX.json`.
+
 **Uptime Kuma** (optional)
 - [ ] A **Push** monitor (60 s heartbeat). Its push URL goes in `UPTIME_KUMA_URL`; the monitor must not be paused.
 
@@ -157,9 +165,9 @@ flyvikingbot/
   storage.py          SQLite (data/flyviking.db): account links and small bot state
   linking.py          pure link-decision and rank-role logic
   system_messages.py  #system-messages helpers: staff check and the persistent Completed button
-  cogs/               one module per feature (airline, website, admin, status, website_events, flight_logs, pilots)
-  services/           async API clients (FSAirlines, Invision Community)
+  cogs/               one module per feature (airline, website, admin, status, website_events, flight_logs, pilots, weather)
+  services/           async API clients (FSAirlines, Invision Community, SayIntentions)
   webhooks/           webhook HTTP receiver and IPS payload parsing
-  tools/              maintenance scripts (fsa_sample, preview_posts)
+  tools/              maintenance scripts (fsa_sample, si_sample, preview_posts)
 tests/
 ```

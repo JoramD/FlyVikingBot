@@ -1,0 +1,29 @@
+{
+  "airports": [
+    {
+      "airport": "EKCH",
+      "atis": "Kastrup information Alpha. Time 1150 Zulu. Expect ILS approach runway 22L. Departure runway 22R. Wind 240 degrees 12 knots. Visibility 10 kilometers or more. Temperature 9, dewpoint 4. QNH 1013. Advise on initial contact you have information Alpha.",
+      "atis_cpdlc": "EKCH ATIS A 1150Z EXP ILS RWY 22L DEP RWY 22R 24012KT 9999 FEW030 09/04 Q1013",
+      "metar": "EKCH 131150Z 24012KT 9999 FEW030 09/04 Q1013 NOSIG",
+      "taf": "TAF EKCH 131100Z 1312/1418 24012KT 9999 FEW030 BECMG 1400/1403 20008KT",
+      "active_runway": "22L",
+      "wind_direction": 240,
+      "wind_speed": 12
+    },
+    {
+      "airport": "ENGM",
+      "atis": "",
+      "atis_cpdlc": "ENGM ATIS B 1150Z RWY 01L 00000KT CAVOK 03/M02 Q1021",
+      "metar": "ENGM 131150Z 00000KT CAVOK 03/M02 Q1021 NOSIG",
+      "taf": null,
+      "active_runway": "01L",
+      "wind_direction": 0,
+      "wind_speed": 0
+    }
+  ],
+  "comms": [
+    {"type": "Tower", "freq": "118.100", "callsign": "Kastrup Tower", "airport": "EKCH"},
+    {"type": "Ground", "freq": "121.900", "callsign": "Kastrup Ground", "airport": "EKCH"},
+    {"type": "Tower", "freq": "118.300", "callsign": "Gardermoen Tower", "airport": "ENGM"}
+  ]
+}
