@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 import time
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -68,7 +69,8 @@ class Storage:
 
     async def _run(self, fn, *args):
         def task():
-            with self._connect() as conn:
+            # `with conn` only commits (or rolls back); closing() also closes the connection
+            with closing(self._connect()) as conn, conn:
                 return fn(conn, *args)
 
         return await asyncio.to_thread(task)

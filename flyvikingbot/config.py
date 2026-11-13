@@ -8,6 +8,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+MIN_WEBHOOK_SECRET_LENGTH = 16  # the secret is part of the webhook URL; too short is guessable
+
 
 class ConfigError(RuntimeError):
     """A setting is missing or invalid; the bot exits with a readable message."""
@@ -100,6 +102,13 @@ def load_settings(
     def int_with_default(name: str, default: str) -> int:
         return to_int(name, get(name, default))
 
+    webhook_secret = require("WEBHOOK_SECRET")
+    if len(webhook_secret) < MIN_WEBHOOK_SECRET_LENGTH:
+        raise ConfigError(
+            f"WEBHOOK_SECRET must be at least {MIN_WEBHOOK_SECRET_LENGTH} characters; generate one with "
+            '`python -c "import secrets;print(secrets.token_urlsafe(32))"`'
+        )
+
     return Settings(
         discord_token=require("DISCORD_TOKEN"),
         fsa_api_key=require("FSA_API_KEY"),
@@ -111,7 +120,7 @@ def load_settings(
         channel_announcements=optional_int("CHANNEL_ANNOUNCEMENTS"),
         channel_screenshots=optional_int("CHANNEL_SCREENSHOTS"),
         channel_bot_development=optional_int("CHANNEL_BOT_DEVELOPMENT"),
-        webhook_secret=require("WEBHOOK_SECRET"),
+        webhook_secret=webhook_secret,
         webhook_bind=get("WEBHOOK_BIND", "0.0.0.0"),
         webhook_port=int_with_default("WEBHOOK_PORT", "8080"),
         webhook_capture=_bool(get("WEBHOOK_CAPTURE", "false")),

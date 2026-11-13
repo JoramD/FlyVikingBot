@@ -40,3 +40,8 @@ def test_sayintentions_keys_optional(settings, tmp_path):
     s = load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path), "SAYINTENTIONS_APP_KEY": "app",
                            "SAYINTENTIONS_ACCOUNT_KEY": "account", "SAYINTENTIONS_VA_KEY": "va"})
     assert (s.sayintentions_app_key, s.sayintentions_account_key, s.sayintentions_va_key) == ("app", "account", "va")
+
+
+def test_short_webhook_secret_is_a_config_error(tmp_path):
+    with pytest.raises(ConfigError, match="WEBHOOK_SECRET must be at least 16 characters"):
+        load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path), "WEBHOOK_SECRET": "short"})
