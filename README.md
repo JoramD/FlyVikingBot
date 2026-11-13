@@ -7,7 +7,7 @@ Discord bot for the FlyViking virtual airline, connecting [flyviking.net](https:
 **Slash commands**
 - `/airline_statistics`: airline-wide statistics from FSAirlines
 - `/file_lookup <query>`: find a file (paint, configuration, ...) in the website's downloads
-- `/clear <amount>`: delete the last 1–50 messages (administrators only)
+- `/clear [amount] [minutes]`: delete the last 1–50 messages and/or those from the last N minutes, up to 24 hours (administrators only)
 - `/pilot [member] [pilot]`: FSAirlines pilot stats. Shows rank, hours, flights, average rating, distance, passengers, cargo, location, last active and last flight. With no option it shows your own linked pilot. `pilot` accepts a callsign (`FVK003`) or a pilot ID.
 - `/sync_rank [member]`: sync FSAirlines rank roles right away (staff with Manage Roles only)
 
