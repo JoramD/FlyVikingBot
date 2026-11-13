@@ -65,7 +65,25 @@ async def test_search_single_match_fetches_file(api):
 async def test_search_zero_or_many(api, total):
     api[0].responses["/core/search"] = (200, {"totalResults": total, "results": []})
     result = await client(api).search_files("x")
-    assert result.total == total and result.file is None
+    assert result.total == total and result.file is None and result.matches == []
+
+
+async def test_search_many_fetches_first_five_files(api):
+    fake = api[0]
+    ids = [11, 12, 12, 13, 14, 15, 16]  # duplicate and a 7th result: only the first 5 results, deduplicated
+    fake.responses["/core/search"] = (200, {"totalResults": 9, "results": [{"itemId": i} for i in ids]})
+    for i in (11, 12, 14, 15):  # 13 fails; the rest are still listed
+        fake.responses[f"/downloads/files/{i}"] = (200, {"id": i, "title": f"File {i}"})
+    result = await client(api).search_files("x")
+    assert result.total == 9 and result.file is None
+    assert [f["id"] for f in result.matches] == [11, 12, 14]
+    assert not any(r.startswith("/downloads/files/15") for r in fake.requests)
+
+
+async def test_search_many_all_fetches_failing_is_service_error(api):
+    api[0].responses["/core/search"] = (200, {"totalResults": 3, "results": [{"itemId": 1}, {"itemId": 2}]})
+    with pytest.raises(ServiceError, match="no data"):
+        await client(api).search_files("x")
 
 
 async def test_website_api_error(api):

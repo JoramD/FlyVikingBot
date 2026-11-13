@@ -9,7 +9,9 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from ..constants import BRAND_COLOUR
 from ..services.http import ServiceError
+from ..services.website import FileSearchResult
 from ..webhooks import ips_events as ev
 from .website_events import file_embed
 
@@ -17,6 +19,31 @@ if TYPE_CHECKING:
     from ..bot import FlyVikingBot
 
 log = logging.getLogger(__name__)
+
+
+def _link_text(text: str) -> str:
+    """Text that is safe inside a Markdown link label."""
+    return discord.utils.escape_markdown(text).replace("[", "(").replace("]", ")")
+
+
+def matches_embed(query: str, result: FileSearchResult) -> discord.Embed:
+    """The first few files of a search with several matches, each as a link."""
+    lines = []
+    for data in result.matches:
+        if (file := ev.parse_downloads_file(data)) is None:
+            continue
+        parts = [f"[{_link_text(file.title or 'Untitled file')}]({file.url})"]
+        if file.category:
+            parts.append(file.category)
+        if file.author:
+            parts.append(f"by {discord.utils.escape_markdown(file.author.name)}")
+        lines.append(" · ".join(parts))
+    embed = discord.Embed(
+        title=f'{result.total} files match "{query[:100]}"', description="\n".join(lines), colour=BRAND_COLOUR
+    )
+    if result.total > len(lines):
+        embed.set_footer(text=f"Showing {len(lines)} of {result.total}; add words to narrow it down")
+    return embed
 
 
 class Website(commands.Cog):
@@ -44,6 +71,10 @@ class Website(commands.Cog):
         file = ev.parse_downloads_file(result.file) if result.file is not None else None
         if file is not None:
             await interaction.followup.send(embed=file_embed(file, new_version=False))
+        elif result.matches:
+            # A list to pick from, not an error; private so the channel only gets the file that's picked
+            await interaction.delete_original_response()
+            await interaction.followup.send(embed=matches_embed(query, result), ephemeral=True)
         elif result.total > 1:
             await self._error(interaction, f"{result.total} files match; try more specific words.")
         else:

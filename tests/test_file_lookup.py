@@ -35,7 +35,7 @@ async def test_single_match_uses_the_standard_file_embed():
 
 async def test_errors_are_private():
     for result, error, text in (
-        (FileSearchResult(total=7), None, "7 files match"),
+        (FileSearchResult(total=7), None, "7 files match"),  # several, but none could be listed
         (FileSearchResult(total=0), None, "No files match"),
         (None, ServiceError("down"), "Could not reach the website"),
     ):
@@ -53,3 +53,21 @@ def test_screenshot_url_or_object():
     data["primaryScreenshot"] = "https://flyviking.net/uploads/main.png"
     assert ev.parse_downloads_file(data).image_url == "https://flyviking.net/uploads/main.png"
 
+
+
+async def test_several_matches_are_listed_privately():
+    first = load_fixture("real_downloadsFile_create")
+    second = {**first, "title": "A320 [neo] *livery*", "url": "https://flyviking.net/files/file/35-a320/",
+              "author": None}
+    cog, interaction = make(FileSearchResult(total=8, matches=[first, second]))
+    await cog.file_lookup.callback(cog, interaction, "test")
+    call = interaction.followup.send.await_args
+    assert call.kwargs["ephemeral"] is True
+    interaction.delete_original_response.assert_awaited_once()
+    embed = call.kwargs["embed"]
+    assert embed.title == '8 files match "test"'
+    assert embed.description.split("\n") == [
+        "[Test](https://flyviking.net/files/file/34-test/) · GSX Configurations · by JoramD",
+        r"[A320 (neo) \*livery\*](https://flyviking.net/files/file/35-a320/) · GSX Configurations",
+    ]
+    assert embed.footer.text == "Showing 2 of 8; add words to narrow it down"

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import asyncio
+from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlencode
 
@@ -18,6 +19,10 @@ class FileSearchResult:
 
     total: int
     file: dict[str, Any] | None = None  # set only when exactly one match
+    matches: list[dict[str, Any]] = field(default_factory=list)  # the first few files when several match
+
+
+MAX_MATCHES = 5  # files listed when a search has several matches
 
 
 class WebsiteClient:
@@ -49,18 +54,24 @@ class WebsiteClient:
         return data
 
     async def search_files(self, query: str) -> FileSearchResult:
-        """Search the downloads. The file itself is fetched only when there's exactly one match."""
+        """Search the downloads. One match: that file. Several: the first MAX_MATCHES files, fetched by ID
+        (one call each, in parallel) because only the search result's itemId is known to be reliable."""
         data = await self._get(
             "/core/search", q=query, type="downloads_file", search_and_or="and", doNotTrack="0"
         )
         try:
             total = int(data.get("totalResults", 0))
-            if total != 1:
-                return FileSearchResult(total=total)
-            item_id = int(data["results"][0]["itemId"])
+            ids = list(dict.fromkeys(int(r["itemId"]) for r in data["results"][:MAX_MATCHES])) if total else []
+            if total == 1 and not ids:
+                raise IndexError("no result for the single match")
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             raise ServiceError(f"Website search returned unexpected data ({type(exc).__name__})") from exc
-        return FileSearchResult(total=1, file=await self.get_file(item_id))
+        if total == 1:
+            return FileSearchResult(total=1, file=await self.get_file(ids[0]))
+        files = await asyncio.gather(*(self.get_file(i) for i in ids), return_exceptions=True)
+        if ids and all(isinstance(f, BaseException) for f in files):
+            raise ServiceError("Website returned no data for the matching files")
+        return FileSearchResult(total=total, matches=[f for f in files if isinstance(f, dict)])
 
     async def get_file(self, file_id: int) -> dict[str, Any]:
         """A downloads file object (title, url, author, primaryScreenshot, ...)."""
