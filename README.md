@@ -27,7 +27,7 @@ Discord bot for the FlyViking virtual airline, connecting [flyviking.net](https:
 |---|---|
 | `galleryImage_create` | The image uploaded in #screenshots in its original quality (IPS's resized "large" version if the original is over 9 MB), with "Uploaded by @member" for linked members (their website profile link otherwise) |
 | `blogEntry_create` | `@everyone` announcement embed in #announcements (excerpt, image, blog category); only for the blog in `ANNOUNCEMENT_BLOG_ID` |
-| `downloadsFile_create` | "New file available" embed in #announcements (author, description, screenshot, category, version) |
+| `downloadsFile_create` | "New file available" embed in #announcements (author, description, screenshot, category, version); "· by @member" is added when the author is linked |
 | `downloads_new_version` | "New version available" embed in #announcements, the same as a new file plus the changelog |
 
 **Monitoring:** Uptime Kuma push heartbeat every 60 s.

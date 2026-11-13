@@ -125,9 +125,12 @@ def announcement_message(entry: ev.BlogEntry) -> dict[str, Any]:
     }
 
 
-def file_message(file: ev.DownloadsFile, *, new_version: bool) -> dict[str, Any]:
+def file_message(file: ev.DownloadsFile, *, new_version: bool, mention: str | None = None) -> dict[str, Any]:
+    """`mention` is the author's Discord mention when they're linked; it goes in the text because the
+    embed's author header can't show mentions (that keeps the website name, avatar and profile link)."""
+    text = "New version available" if new_version else "New file available"
     return {
-        "content": "New version available" if new_version else "New file available",
+        "content": f"{text} · by {mention}" if mention else text,
         "embed": file_embed(file, new_version=new_version),
         "allowed_mentions": NO_MENTIONS,
     }
@@ -255,7 +258,8 @@ class WebsiteEvents(commands.Cog):
                 channel := await self._channel(self.settings.channel_announcements, "CHANNEL_ANNOUNCEMENTS")
             ):
                 file = await with_category_path(getattr(self.bot, "website", None), file)
-                await channel.send(**file_message(file, new_version=new_version))
+                mention = await self.author_mention(file.author)
+                await channel.send(**file_message(file, new_version=new_version, mention=mention))
 
         elif event not in ev.MEMBER_EVENTS:  # member events are handled by the pilots cog
             log.info("Ignoring unhandled webhook event %s", event)

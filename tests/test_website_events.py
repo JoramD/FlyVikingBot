@@ -280,3 +280,23 @@ async def test_gallery_uploader_shown_as_discord_member_when_linked(tmp_path, li
     call = ch[200].send.await_args
     assert call.kwargs["content"] == content
     assert call.kwargs["allowed_mentions"].users is False  # the mention never pings
+
+
+@pytest.mark.parametrize(
+    ("linked", "content"), [(True, "New file available · by <@77>"), (False, "New file available")]
+)
+async def test_file_post_names_linked_author_in_text(tmp_path, linked, content):
+    from flyvikingbot.storage import Storage
+
+    cog, ch = make_cog(tmp_path)
+    cog.bot.storage = Storage(tmp_path / "db.sqlite")
+    await cog.bot.storage.init()
+    if linked:  # website member 1 (the fixture's author) is linked to Discord user 77
+        await cog.bot.storage.save_link(discord_id=77, ips_member_id=1, ips_profile_url=None, discord_name="joram",
+                                        service="fsa", external_id="100", source="auto")
+    cog.bot.primary_guild = lambda: SimpleNamespace(get_member={77: object()}.get)
+    await cog.handle(ev.DOWNLOADS_FILE_CREATE, load_fixture("real_downloadsFile_create"))
+    call = ch[100].send.await_args
+    assert call.kwargs["content"] == content
+    assert call.kwargs["embed"].author.name == "JoramD"  # the header keeps the website author
+    assert call.kwargs["allowed_mentions"].users is False

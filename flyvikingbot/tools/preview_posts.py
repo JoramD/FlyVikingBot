@@ -88,7 +88,7 @@ def _file(ctx: Context, *, new_version: bool) -> dict[str, Any]:
         changelog=ev.excerpt("<p>Sharper tail logo, fixed the <b>door</b> textures.</p>") if new_version else None,
         date=NOW,
     )
-    return file_message(file, new_version=new_version)
+    return file_message(file, new_version=new_version, mention=ctx.mention)  # as for a linked author
 
 
 def _gallery(ctx: Context) -> dict[str, Any]:
