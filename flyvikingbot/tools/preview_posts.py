@@ -84,7 +84,7 @@ def _file(ctx: Context, *, new_version: bool) -> dict[str, Any]:
     file = ev.DownloadsFile(
         title="FlyViking A320neo livery", url=f"{ctx.site}/files/", version="2.0.0" if new_version else "1.0.0",
         author=ctx.author, excerpt=ev.excerpt("<p>Our house livery for the default A320neo.</p>"),
-        category="Liveries", image_url=f"attachment://{SAMPLE_IMAGE}",
+        category="Paints › FlyViking", image_url=f"attachment://{SAMPLE_IMAGE}",
         changelog=ev.excerpt("<p>Sharper tail logo, fixed the <b>door</b> textures.</p>") if new_version else None,
         date=NOW,
     )

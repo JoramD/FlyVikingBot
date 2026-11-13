@@ -78,6 +78,7 @@ Everything the bot needs outside this repository, in one place. Details follow i
 **Website (Invision Community ACP)**
 - [ ] REST API key (`WEBSITE_API_KEY`) allowed to use:
   - `GET /core/search` and `GET /downloads/files/{id}` (`/file_lookup`)
+  - `GET /downloads/categories` (full category path such as "Paints › FlyViking" in file posts and `/file_lookup`; without it only the subcategory is shown)
   - `GET /core/members` (on-demand linking)
   - `GET /core/groups`, `GET /core/members/{id}` and `POST /core/members/{id}` (website rank groups)
 - [ ] Webhooks (one per event) to `http://flyviking-bot:8080/ips/<WEBHOOK_SECRET>/<event>`: `galleryImage_create`, `blogEntry_create`, `downloadsFile_create`, `downloads_new_version` and `member_edited`.

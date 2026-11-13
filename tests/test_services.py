@@ -4,7 +4,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer
 
 from flyvikingbot.services.http import ServiceError
-from flyvikingbot.services.website import WebsiteClient
+from flyvikingbot.services.website import WebsiteClient, category_path
 
 
 class FakeApi:
@@ -105,3 +105,23 @@ async def test_search_malformed_response_is_service_error(api, body):
     api[0].responses["/core/search"] = (200, body)
     with pytest.raises(ServiceError, match="unexpected data"):
         await client(api).search_files("x")
+
+
+def test_category_path():
+    cats = {1: ("Paints", None), 2: ("FlyViking", 1), 3: ("A320", 2), 8: ("Loop", 9), 9: ("Back", 8)}
+    assert category_path(cats, 2) == "Paints › FlyViking"
+    assert category_path(cats, 3) == "Paints › FlyViking › A320"
+    assert category_path(cats, 1) == "Paints"
+    assert category_path(cats, 42) is None
+    assert category_path(cats, 8) == "Back › Loop"  # a parent loop doesn't hang
+
+
+async def test_download_categories_are_cached(api):
+    fake = api[0]
+    fake.responses["/downloads/categories"] = (200, {"page": 1, "totalPages": 1, "results": [
+        {"id": 1, "name": "Paints", "parentId": 0}, {"id": 2, "name": "FlyViking", "parentId": 1}, {"bad": True},
+    ]})
+    website = client(api)
+    assert await website.download_categories() == {1: ("Paints", None), 2: ("FlyViking", 1)}
+    await website.download_categories()
+    assert sum(r.startswith("/downloads/categories") for r in fake.requests) == 1

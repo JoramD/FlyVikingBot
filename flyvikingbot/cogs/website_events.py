@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import io
 import logging
 import posixpath
@@ -14,6 +15,8 @@ import discord
 from discord.ext import commands
 
 from ..constants import BRAND_COLOUR
+from ..services.http import ServiceError
+from ..services.website import category_path
 from ..webhooks import ips_events as ev
 
 if TYPE_CHECKING:
@@ -91,6 +94,19 @@ def author_line(author: ev.Author | None) -> str | None:
         return None
     name = discord.utils.escape_markdown(author.name)
     return f"Uploaded by [{name}](<{author.profile_url}>)" if author.profile_url else f"Uploaded by {name}"
+
+
+async def with_category_path(website: Any, file: ev.DownloadsFile) -> ev.DownloadsFile:
+    """The file with its category shown as the full path ('Paints › FlyViking'). Payloads only name the
+    subcategory, so the names come from the website's category list. Unchanged if that isn't available."""
+    if website is None or file.category_id is None:
+        return file
+    try:
+        path = category_path(await website.download_categories(), file.category_id)
+    except ServiceError as exc:
+        log.warning("Could not load download categories, showing the subcategory only: %s", exc)
+        return file
+    return dataclasses.replace(file, category=path) if path else file
 
 
 # --- complete messages ------------------------------------------------------------------------------------------------
@@ -203,6 +219,7 @@ class WebsiteEvents(commands.Cog):
             if (file := ev.parse_downloads_file(payload, event)) and (
                 channel := await self._channel(self.settings.channel_announcements, "CHANNEL_ANNOUNCEMENTS")
             ):
+                file = await with_category_path(getattr(self.bot, "website", None), file)
                 await channel.send(**file_message(file, new_version=new_version))
 
         elif event not in ev.MEMBER_EVENTS:  # member events are handled by the pilots cog

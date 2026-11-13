@@ -71,7 +71,8 @@ class DownloadsFile:
     version: str | None
     author: Author | None = None
     excerpt: str | None = None
-    category: str | None = None
+    category: str | None = None  # the file's own (sub)category; see category_id for the full path
+    category_id: int | None = None
     image_url: str | None = None  # primary screenshot
     changelog: str | None = None
     date: datetime | None = None
@@ -207,6 +208,7 @@ def parse_downloads_file(payload: Any, event: str = DOWNLOADS_FILE_CREATE) -> Do
         author=parse_author(data),
         excerpt=excerpt(data.get("description")),
         category=_str(_nested(data, "category", "name")),
+        category_id=_int(_nested(data, "category", "id")),
         image_url=_first(_image_url(data.get("primaryScreenshot")), _image_url(first_screenshot)),
         changelog=excerpt(data.get("changelog"), limit=1000),
         date=_date(data.get("updated")) or _date(data.get("date")),

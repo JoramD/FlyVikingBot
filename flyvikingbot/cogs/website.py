@@ -11,9 +11,8 @@ from discord.ext import commands
 
 from ..constants import BRAND_COLOUR
 from ..services.http import ServiceError
-from ..services.website import FileSearchResult
 from ..webhooks import ips_events as ev
-from .website_events import file_embed
+from .website_events import file_embed, with_category_path
 
 if TYPE_CHECKING:
     from ..bot import FlyVikingBot
@@ -26,12 +25,10 @@ def _link_text(text: str) -> str:
     return discord.utils.escape_markdown(text).replace("[", "(").replace("]", ")")
 
 
-def matches_embed(query: str, result: FileSearchResult) -> discord.Embed:
+def matches_embed(query: str, total: int, files: list[ev.DownloadsFile]) -> discord.Embed:
     """The first few files of a search with several matches, each as a link."""
     lines = []
-    for data in result.matches:
-        if (file := ev.parse_downloads_file(data)) is None:
-            continue
+    for file in files:
         parts = [f"[{_link_text(file.title or 'Untitled file')}]({file.url})"]
         if file.category:
             parts.append(file.category)
@@ -39,10 +36,10 @@ def matches_embed(query: str, result: FileSearchResult) -> discord.Embed:
             parts.append(f"by {discord.utils.escape_markdown(file.author.name)}")
         lines.append(" · ".join(parts))
     embed = discord.Embed(
-        title=f'{result.total} files match "{query[:100]}"', description="\n".join(lines), colour=BRAND_COLOUR
+        title=f'{total} files match "{query[:100]}"', description="\n".join(lines), colour=BRAND_COLOUR
     )
-    if result.total > len(lines):
-        embed.set_footer(text=f"Showing {len(lines)} of {result.total}; add words to narrow it down")
+    if total > len(lines):
+        embed.set_footer(text=f"Showing {len(lines)} of {total}; add words to narrow it down")
     return embed
 
 
@@ -69,12 +66,15 @@ class Website(commands.Cog):
 
         # The REST file object has the same shape as the webhook payload: reuse the "New file" post layout
         file = ev.parse_downloads_file(result.file) if result.file is not None else None
+        matches = [f for data in result.matches if (f := ev.parse_downloads_file(data)) is not None]
         if file is not None:
+            file = await with_category_path(self.bot.website, file)
             await interaction.followup.send(embed=file_embed(file, new_version=False))
-        elif result.matches:
+        elif matches:
             # A list to pick from, not an error; private so the channel only gets the file that's picked
+            matches = [await with_category_path(self.bot.website, f) for f in matches]
             await interaction.delete_original_response()
-            await interaction.followup.send(embed=matches_embed(query, result), ephemeral=True)
+            await interaction.followup.send(embed=matches_embed(query, result.total, matches), ephemeral=True)
         elif result.total > 1:
             await self._error(interaction, f"{result.total} files match; try more specific words.")
         else:

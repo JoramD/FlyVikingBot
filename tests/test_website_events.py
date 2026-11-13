@@ -178,3 +178,11 @@ async def test_unset_channel_means_not_posted(tmp_path, event, fixture):
     await cog.handle(event, load_fixture(fixture))
     ch[100].send.assert_not_awaited()
     ch[200].send.assert_not_awaited()
+
+
+async def test_new_file_post_shows_full_category_path(tmp_path):
+    cog, ch = make_cog(tmp_path)
+    cog.bot.website = SimpleNamespace(download_categories=AsyncMock(return_value={
+        5: ("Add-ons", None), 6: ("GSX Configurations", 5)}))
+    await cog.handle(ev.DOWNLOADS_FILE_CREATE, load_fixture("real_downloadsFile_create"))
+    assert ch[100].send.await_args.kwargs["embed"].footer.text == "Add-ons › GSX Configurations · flyviking.net"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlencode
@@ -23,6 +24,20 @@ class FileSearchResult:
 
 
 MAX_MATCHES = 5  # files listed when a search has several matches
+CATEGORY_CACHE_SECONDS = 3600
+CATEGORY_SEPARATOR = " › "
+
+
+def category_path(categories: dict[int, tuple[str, int | None]], category_id: int) -> str | None:
+    """'Paints › FlyViking' for a subcategory: its parents' names, top first. None if the ID is unknown."""
+    names: list[str] = []
+    seen: set[int] = set()
+    current: int | None = category_id
+    while current and current in categories and current not in seen:  # `seen` guards against loops
+        seen.add(current)
+        name, current = categories[current]
+        names.insert(0, name)
+    return CATEGORY_SEPARATOR.join(n for n in names if n) or None
 
 
 class WebsiteClient:
@@ -32,6 +47,7 @@ class WebsiteClient:
         self._session = session
         self._base_url = base_url
         self._api_key = api_key
+        self._categories: tuple[float, dict[int, tuple[str, int | None]]] | None = None
 
     def build_url(self, endpoint: str, **params: Any) -> URL:
         # IPS routes on the raw query string (index.php?/core/search&q=...), so the
@@ -72,6 +88,22 @@ class WebsiteClient:
         if ids and all(isinstance(f, BaseException) for f in files):
             raise ServiceError("Website returned no data for the matching files")
         return FileSearchResult(total=total, matches=[f for f in files if isinstance(f, dict)])
+
+    async def download_categories(self) -> dict[int, tuple[str, int | None]]:
+        """Downloads categories as {id: (name, parent id or None)}, cached for an hour."""
+        now = time.monotonic()
+        if self._categories and now - self._categories[0] < CATEGORY_CACHE_SECONDS:
+            return self._categories[1]
+        categories: dict[int, tuple[str, int | None]] = {}
+        async for page in self._pages("/downloads/categories"):
+            for c in page:
+                try:
+                    parent = int(c.get("parentId") or 0)
+                    categories[int(c["id"])] = (str(c.get("name") or ""), parent or None)
+                except (KeyError, TypeError, ValueError):
+                    continue
+        self._categories = (now, categories)
+        return categories
 
     async def get_file(self, file_id: int) -> dict[str, Any]:
         """A downloads file object (title, url, author, primaryScreenshot, ...)."""
