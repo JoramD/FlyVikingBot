@@ -47,13 +47,13 @@ python -c "import secrets;print(secrets.token_urlsafe(32))"
 docker compose up -d --build
 ```
 - Logs, the bot's database and captured webhook payloads end up in `./data/`. The container runs as UID 1000, so that folder must be owned by UID 1000 (`mkdir data && sudo chown 1000:1000 data`).
-- This compose file **creates** the Docker network named by `DOCKER_NETWORK` (default `flyviking`). The website's **cron** container (IPS sends webhooks from its cron task) joins it as an external network, so IPS can reach the bot at `http://flyviking-bot:8080`; nothing is exposed publicly. Start the bot's stack before the website's. In the website's `docker-compose.yml`:
+- This compose file **creates** the Docker network named by `DOCKER_NETWORK` (default `flyviking-bot`). The website's **cron** container (IPS sends webhooks from its cron task) joins it as an external network, so IPS can reach the bot at `http://flyviking-bot:8080`; nothing is exposed publicly. Start the bot's stack before the website's. In the website's `docker-compose.yml`:
   ```yaml
   services:
     cron:                # your cron service
-      networks: [default, flyviking]
+      networks: [default, flyviking-bot]
   networks:
-    flyviking:
+    flyviking-bot:
       external: true
   ```
 
@@ -87,7 +87,7 @@ Everything the bot needs outside this repository, in one place. Details follow i
 - [ ] Two member-editable profile fields: **FSAirlines Pilot ID** (text; regex `/^\s*(?:FVK\d{3,}|\d+)\s*$/i`) and **Discord Username**. Their IDs go in `IPS_FIELD_FSA_PILOT_ID` / `IPS_FIELD_DISCORD_NAME`.
 - [ ] Optional: a **FlyViking rank** profile field (text, *not* editable by members, shown on profiles and optionally in posts). Its ID goes in `IPS_FIELD_FSA_RANK`.
 - [ ] Secondary member groups named like the rank roles, and a **Members** group.
-- [ ] The **cron** container, which sends the webhooks, on the `flyviking` Docker network, permanently in the website's compose file. It also needs a working cron/task setup.
+- [ ] The **cron** container, which sends the webhooks, on the `flyviking-bot` Docker network, permanently in the website's compose file. It also needs a working cron/task setup.
 
 **FSAirlines**
 - [ ] API key (VA Overview → Edit VA Settings → Api Key Management) in `FSA_API_KEY`. A *site* key locks to the first IP that uses it 100 times, so only use it from the server.
@@ -124,7 +124,7 @@ Everything the bot needs outside this repository, in one place. Details follow i
 > - The **cron container** must be on the `flyviking` network, or it can't resolve `flyviking-bot` and deliveries fail with nothing logged on the bot's side.
 > - Discord posts arrive up to one cron interval after publishing.
 >
-> To troubleshoot, each request the bot receives is logged as `Webhook HTTP <method> <path> from <ip> -> <status>`, with the secret masked. To find out which container sent a request, compare its IP with `docker network inspect flyviking`.
+> To troubleshoot, each request the bot receives is logged as `Webhook HTTP <method> <path> from <ip> -> <status>`, with the secret masked. To find out which container sent a request, compare its IP with `docker network inspect flyviking-bot`.
 
 Health check: `GET /health`.
 
