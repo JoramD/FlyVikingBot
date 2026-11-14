@@ -30,6 +30,7 @@ class Settings:
     channel_announcements: int | None  # blog announcements + new downloads; unset = not posted
     channel_screenshots: int | None  # new gallery images; unset = not posted
     channel_bot_development: int | None  # message previews (tools/preview_posts); unset = tool refuses
+    emoji_flyviking_v: str | None  # FlyViking logo emoji in the bot's own embed titles; unset = no emoji
 
     webhook_secret: str
     webhook_bind: str
@@ -120,6 +121,7 @@ def load_settings(
         channel_announcements=optional_int("CHANNEL_ANNOUNCEMENTS"),
         channel_screenshots=optional_int("CHANNEL_SCREENSHOTS"),
         channel_bot_development=optional_int("CHANNEL_BOT_DEVELOPMENT"),
+        emoji_flyviking_v=get("EMOJI_FLYVIKING_V"),
         webhook_secret=webhook_secret,
         webhook_bind=get("WEBHOOK_BIND", "0.0.0.0"),
         webhook_port=int_with_default("WEBHOOK_PORT", "8080"),

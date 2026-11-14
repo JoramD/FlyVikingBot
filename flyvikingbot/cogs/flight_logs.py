@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 import discord
 from discord.ext import commands, tasks
 
-from ..constants import BRAND_COLOUR
+from ..constants import BRAND_COLOUR, with_emoji
 from ..linking import SERVICE_FSA
 from ..services.fsairlines import FlightLog
 from ..services.http import ServiceError
@@ -38,8 +38,10 @@ def flight_title(flight: FlightLog) -> str:
     return f"{number} · {route}" if number else route
 
 
-def flight_log_embed(flight: FlightLog, pilot_mention: str | None = None) -> discord.Embed:
-    embed = discord.Embed(title=flight_title(flight), colour=BRAND_COLOUR, timestamp=flight.completed_at)
+def flight_log_embed(flight: FlightLog, pilot_mention: str | None = None, emoji: str | None = None) -> discord.Embed:
+    embed = discord.Embed(
+        title=with_emoji(flight_title(flight), emoji), colour=BRAND_COLOUR, timestamp=flight.completed_at
+    )
 
     pilot = pilot_mention or flight.pilot_name or (f"Pilot {flight.pilot_id}" if flight.pilot_id else None)
     if pilot and flight.callsign:
@@ -64,10 +66,13 @@ def flight_log_embed(flight: FlightLog, pilot_mention: str | None = None) -> dis
     return embed
 
 
-def flight_log_message(flight: FlightLog, pilot_mention: str | None = None) -> dict[str, Any]:
+def flight_log_message(
+    flight: FlightLog, pilot_mention: str | None = None, emoji: str | None = None
+) -> dict[str, Any]:
     """The flight log post (channel.send() kwargs; see the RULE in tools/preview_posts.py).
     The pilot's mention is shown but never pings: it's in an embed, and mentions are off."""
-    return {"embed": flight_log_embed(flight, pilot_mention), "allowed_mentions": discord.AllowedMentions.none()}
+    embed = flight_log_embed(flight, pilot_mention, emoji)
+    return {"embed": embed, "allowed_mentions": discord.AllowedMentions.none()}
 
 
 class FlightLogs(commands.Cog):
@@ -126,7 +131,7 @@ class FlightLogs(commands.Cog):
                 mention = f"<@{link.discord_id}>"
 
             # Raises on failure, so the stored ID isn't advanced and the flight is retried next cycle
-            await channel.send(**flight_log_message(flight, mention))
+            await channel.send(**flight_log_message(flight, mention, self.bot.settings.emoji_flyviking_v))
             await storage.kv_set(LAST_ID_KEY, str(flight.id))
             posted += 1
         return posted

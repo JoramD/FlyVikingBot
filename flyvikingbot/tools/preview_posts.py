@@ -58,6 +58,7 @@ class Context:
     site: str  # website root, e.g. https://flyviking.net
     avatar_url: str | None  # the bot's avatar stands in for a member's
     mention: str  # the bot's mention stands in for a linked pilot
+    emoji: str | None = None  # EMOJI_FLYVIKING_V
 
     @property
     def author(self) -> ev.Author:
@@ -103,7 +104,7 @@ def _flight_log(ctx: Context) -> dict[str, Any]:
         pilot_id="0", pilot_name="SamplePilot", hours=2.75, distance=1046, rating=95, pax=164, cargo_kg=2140,
         landing_rate=-142, completed_at=NOW, callsign="FVK000", packages_kg=None, sim="FS2024",
     )
-    return flight_log_message(flight, ctx.mention)
+    return flight_log_message(flight, ctx.mention, ctx.emoji)
 
 
 # name -> (the real builder, a function that calls it with sample data)
@@ -138,6 +139,7 @@ async def main(names: list[str]) -> int:
             site=settings.website_root.rstrip("/"),
             avatar_url=user.display_avatar.url if user else None,
             mention=user.mention if user else "SamplePilot",
+            emoji=settings.emoji_flyviking_v,
         )
         channel = await client.fetch_channel(settings.channel_bot_development)
         for name in names:

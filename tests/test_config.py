@@ -45,3 +45,9 @@ def test_sayintentions_keys_optional(settings, tmp_path):
 def test_short_webhook_secret_is_a_config_error(tmp_path):
     with pytest.raises(ConfigError, match="WEBHOOK_SECRET must be at least 16 characters"):
         load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path), "WEBHOOK_SECRET": "short"})
+
+
+def test_flyviking_emoji_is_optional(settings, tmp_path):
+    assert settings.emoji_flyviking_v is None
+    s = load_settings(env={**BASE_ENV, "DATA_DIR": str(tmp_path), "EMOJI_FLYVIKING_V": "<:FlyVikingV:1>"})
+    assert s.emoji_flyviking_v == "<:FlyVikingV:1>"
