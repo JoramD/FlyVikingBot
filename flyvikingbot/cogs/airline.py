@@ -9,7 +9,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from ..constants import BRAND_COLOUR, EMOJI_FLYVIKING_V
+from ..constants import BRAND_COLOUR, with_emoji
 from ..interactions import FSA_UNREACHABLE, reply_ephemeral
 from ..services.http import ServiceError
 
@@ -37,9 +37,9 @@ def _fmt(value: Any, suffix: str) -> str:
         return "n/a"
 
 
-def stats_embed(data: dict[str, Any]) -> discord.Embed:
+def stats_embed(data: dict[str, Any], emoji: str | None = None) -> discord.Embed:
     embed = discord.Embed(
-        title=f"{EMOJI_FLYVIKING_V} Airline Statistics", colour=BRAND_COLOUR, timestamp=discord.utils.utcnow()
+        title=with_emoji("Airline Statistics", emoji), colour=BRAND_COLOUR, timestamp=discord.utils.utcnow()
     )
     for name, key, suffix in STAT_FIELDS:
         embed.add_field(name=name, value=_fmt(data.get(key), suffix), inline=True)
@@ -63,7 +63,7 @@ class Airline(commands.Cog):
             await interaction.delete_original_response()
             await reply_ephemeral(interaction, FSA_UNREACHABLE, delete_after=None)
             return
-        await interaction.followup.send(embed=stats_embed(data))
+        await interaction.followup.send(embed=stats_embed(data, self.bot.settings.emoji_flyviking_v))
 
 
 async def setup(bot: FlyVikingBot) -> None:

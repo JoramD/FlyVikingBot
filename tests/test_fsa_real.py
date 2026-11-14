@@ -61,6 +61,8 @@ async def test_pilot_from_real_data(fsa):
     embed = pilot_embed(pilot, "<@1>", None, rank_name="Chief Executive Officer")
     fields = {f.name: f.value for f in embed.fields}
     assert embed.title == "Ola Hansen · FVK001"
+    branded = pilot_embed(pilot, "<@1>", None, emoji="<:FlyVikingV:1>")
+    assert branded.title == "<:FlyVikingV:1> Ola Hansen · FVK001"
     assert fields["Rank"] == "Chief Executive Officer" and fields["Avg. rating"] == "99.7%"
     assert fields["Hours"] == "1156:54" and fields["Flights"] == "672"
     assert embed.footer.text == "FSAirlines pilot 97396"  # not FSA's site-wide "Senior Flight Captain" title

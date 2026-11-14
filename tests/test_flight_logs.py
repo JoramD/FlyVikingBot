@@ -36,7 +36,8 @@ async def feed(tmp_path):
     await storage.init()
     channel = AsyncMock()
     fsa = FakeFsa([flight(1), flight(2)])
-    bot = SimpleNamespace(storage=storage, fsa=fsa, get_channel=lambda cid: channel, fetch_channel=AsyncMock())
+    bot = SimpleNamespace(storage=storage, fsa=fsa, get_channel=lambda cid: channel, fetch_channel=AsyncMock(),
+                          settings=SimpleNamespace(emoji_flyviking_v="<:FlyVikingV:1>"))
     cog = fl.FlightLogs.__new__(fl.FlightLogs)  # skip __init__ (it starts the task loop)
     cog.bot, cog.channel_id = bot, 123
     return cog, fsa, channel, storage
@@ -55,7 +56,7 @@ async def test_posts_only_new_flights_in_order(feed):
     fsa.flights += [flight(4), flight(3)]
     assert await cog.check_new_flights() == 2
     titles = [c.kwargs["embed"].title for c in channel.send.await_args_list]
-    assert titles == ["FV3 · BIKF → EGLL", "FV4 · BIKF → EGLL"]
+    assert titles == ["<:FlyVikingV:1> FV3 · BIKF → EGLL", "<:FlyVikingV:1> FV4 · BIKF → EGLL"]  # emoji from .env
     assert fsa.detail_calls == [3, 4]
     assert await storage.kv_get(fl.LAST_ID_KEY) == "4"
     assert await cog.check_new_flights() == 0  # nothing new
@@ -96,3 +97,8 @@ def test_embed_contents():
     assert fields["Pilot"] == "Jan Jansen" and fields["Block time"] == "2:30" and fields["Distance"] == "1,032 nm"
     assert fields["Landing rate"] == "-142 fpm" and fields["Cargo"] == "500 kg"
     assert "Diverted" in embed.description
+
+
+def test_flight_log_title_gets_the_flyviking_emoji_when_set():
+    assert fl.flight_log_embed(flight(1), emoji="<:FlyVikingV:1>").title.startswith("<:FlyVikingV:1> ")
+    assert not fl.flight_log_embed(flight(1)).title.startswith("<")  # no emoji configured

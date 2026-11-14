@@ -15,7 +15,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from .. import linking as lk
-from ..constants import BRAND_COLOUR
+from ..constants import BRAND_COLOUR, with_emoji
 from ..interactions import FSA_UNREACHABLE, fit_lines, reply_ephemeral
 from ..services.fsairlines import FsaNotFound, Pilot
 from ..services.http import ServiceError
@@ -83,9 +83,10 @@ def review_view(ips_member_id: int) -> discord.ui.View:
 # --- embeds ----------------------------------------------------------------------------------------
 
 
-def pilot_embed(pilot: Pilot, mention: str | None, last_flight: Any | None, rank_name: str | None = None
-                ) -> discord.Embed:
-    title = f"{pilot.full_name} · {pilot.callsign}" if pilot.callsign else pilot.full_name
+def pilot_embed(
+    pilot: Pilot, mention: str | None, last_flight: Any | None, rank_name: str | None = None, emoji: str | None = None
+) -> discord.Embed:
+    title = with_emoji(f"{pilot.full_name} · {pilot.callsign}" if pilot.callsign else pilot.full_name, emoji)
     embed = discord.Embed(title=title, colour=BRAND_COLOUR)
     if mention:
         embed.description = mention
@@ -840,7 +841,9 @@ class Pilots(commands.Cog):
         except ServiceError:
             flights = []
         rank_name = await self.rank_name(data.rank_id)
-        await interaction.followup.send(embed=pilot_embed(data, mention, flights[-1] if flights else None, rank_name))
+        last_flight = flights[-1] if flights else None
+        embed = pilot_embed(data, mention, last_flight, rank_name, self.settings.emoji_flyviking_v)
+        await interaction.followup.send(embed=embed)
 
 
 async def setup(bot: FlyVikingBot) -> None:

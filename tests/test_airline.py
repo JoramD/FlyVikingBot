@@ -16,3 +16,8 @@ def test_stats_embed_formatting():
     }
     assert embed.description is None
     assert embed.footer.text == "FSAirlines" and embed.timestamp is not None
+
+
+def test_stats_title_emoji_comes_from_settings():
+    assert stats_embed({}, "<:FlyVikingV:1>").title == "<:FlyVikingV:1> Airline Statistics"
+    assert stats_embed({}).title == "Airline Statistics"  # EMOJI_FLYVIKING_V empty
