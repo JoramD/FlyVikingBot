@@ -4,6 +4,7 @@ the webhook server and the #system-messages helper."""
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any
 
 import aiohttp
@@ -14,6 +15,7 @@ from discord.ext import commands
 from .config import Settings
 from .interactions import reply_ephemeral
 from .services.fsairlines import FsaClient
+from .services.http import ServiceHealth
 from .services.sayintentions import SayIntentionsClient
 from .services.website import WebsiteClient
 from .storage import Storage
@@ -51,12 +53,15 @@ class FlyVikingBot(commands.Bot):
         self.website: WebsiteClient | None = None
         self.fsa: FsaClient | None = None
         self.sayintentions: SayIntentionsClient | None = None  # None when the SayIntentions keys aren't set
+        # Set from Discord's connect/disconnect events: the gateway can drop while everything else keeps running
+        self.discord_connected = False
         self.storage = Storage(settings.data_dir / "flyviking.db")
         self.webhook_server = WebhookServer(
             secret=settings.webhook_secret,
             on_event=self._on_webhook,
             capture_dir=settings.data_dir / "webhook_samples" if settings.webhook_capture else None,
             capture_keep=settings.webhook_capture_keep,
+            health=self.health_report,
         )
 
     def _on_webhook(self, event: str, payload: Any) -> None:
@@ -139,7 +144,32 @@ class FlyVikingBot(commands.Bot):
         log.error("Error in /%s", name, exc_info=error)
 
     async def on_ready(self) -> None:
+        self.discord_connected = True
         log.info("Logged in as %s (%s)", self.user, getattr(self.user, "id", "?"))
+
+    async def on_resumed(self) -> None:
+        self.discord_connected = True
+
+    async def on_disconnect(self) -> None:
+        self.discord_connected = False
+
+    # --- health (/health and the Uptime Kuma push) -------------------------------------------------------
+
+    def service_health(self) -> list[ServiceHealth]:
+        """Reachability of the outside services the bot uses (the ones configured)."""
+        return [client.health for client in (self.fsa, self.website, self.sayintentions) if client is not None]
+
+    def latency_ms(self) -> int | None:
+        """Discord gateway round trip in milliseconds, while connected."""
+        latency = self.latency
+        return round(latency * 1000) if self.discord_connected and math.isfinite(latency) else None
+
+    def health_report(self) -> dict[str, Any]:
+        return {
+            "status": "ok" if self.discord_connected else "discord_disconnected",
+            "discord": {"connected": self.discord_connected, "latency_ms": self.latency_ms()},
+            "services": {h.name: h.as_dict() for h in self.service_health()},
+        }
 
     async def close(self) -> None:
         await self.webhook_server.stop()

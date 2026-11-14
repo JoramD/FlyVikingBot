@@ -30,7 +30,11 @@ Discord bot for the FlyViking virtual airline, connecting [flyviking.net](https:
 | `downloadsFile_create` | "New file available" embed in #announcements (author, description, screenshot, category, version); "· by @member" is added when the author is linked |
 | `downloads_new_version` | "New version available" embed in #announcements, the same as a new file plus the changelog |
 
-**Monitoring:** Uptime Kuma push heartbeat every 60 s.
+**Monitoring** (Uptime Kuma push monitor, every 60 s):
+- **Up:** the bot is connected to Discord. The push includes Discord's response time, which Kuma charts, and the message "OK".
+- **Up, with a message** such as "FSAirlines unreachable since 12:03 UTC" when an outside service (FSAirlines, the website, SayIntentions) can't be reached. The bot itself still works, so it stays up.
+- **Down** right away while the bot is disconnected from Discord. If the bot stops completely, the pushes stop and Kuma marks it down after its heartbeat interval.
+- `GET /health` on port 8080 returns the same information as JSON, with status 503 while disconnected from Discord. Docker's health check uses it. Uptime Kuma can also check it directly over the `flyviking-bot` Docker network with an HTTP monitor on `http://flyviking-bot:8080/health`.
 
 ## Configuration
 
@@ -102,7 +106,8 @@ Everything the bot needs outside this repository, in one place. Details follow i
 - [ ] Check the response format once: `docker compose exec bot python -m flyvikingbot.tools.si_sample EKCH` saves a real reply to `data/sayintentions_samples/getWX.json`.
 
 **Uptime Kuma** (optional)
-- [ ] A **Push** monitor (60 s heartbeat). Its push URL goes in `UPTIME_KUMA_URL`; the monitor must not be paused.
+- [ ] A **Push** monitor (60 s heartbeat). Its push URL goes in `UPTIME_KUMA_URL`, as Kuma shows it, including `?status=up&msg=OK&ping=`; the bot fills those in itself. The monitor must not be paused.
+- [ ] Optional, as a second check: an **HTTP(s)** monitor on `http://flyviking-bot:8080/health` (Kuma's container must be on the `flyviking-bot` network). It turns red on status 503.
 
 **Server**
 - [ ] A `data` folder owned by UID 1000 (`mkdir data && sudo chown 1000:1000 data`), a filled-in `.env` (see `.env.example`), then `docker compose up -d --build`.

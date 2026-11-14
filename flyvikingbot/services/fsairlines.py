@@ -15,7 +15,7 @@ from typing import Any
 
 import aiohttp
 
-from .http import ServiceError, get_json
+from .http import ServiceError, ServiceHealth, get_json
 
 API_URL = "https://www.fsairlines.net/va_interface2.php"
 SITE_URL = "https://www.fsairlines.net/"
@@ -239,12 +239,13 @@ class FsaClient:
         self._api_key = api_key
         self._api_url = api_url
         self._ranks: tuple[float, list[Rank]] | None = None
+        self.health = ServiceHealth("FSAirlines")
 
     async def call(self, function: str, **params: Any) -> list[dict[str, Any]]:
         """Call an XML-Interface function and return its data records."""
         query = {"function": function, "va_id": self._va_id, "format": "json", "apikey": self._api_key}
         query.update({k: v for k, v in params.items() if v is not None})
-        data = await get_json(self._session, self._api_url, params=query)
+        data = await get_json(self._session, self._api_url, params=query, health=self.health)
         if not isinstance(data, dict):
             raise ServiceError(f"FSAirlines {function}: unexpected response type {type(data).__name__}")
         status = str(data.get("status", "")).upper()

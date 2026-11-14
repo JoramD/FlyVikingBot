@@ -3,7 +3,7 @@
 Routes:
     POST /ips/{secret}            event name from the IPS "Webhook-Event" header
     POST /ips/{secret}/{event}    event name from the URL (takes precedence)
-    GET  /health                  liveness probe
+    GET  /health                  bot health as JSON; 503 while disconnected from Discord
 
 The handler answers 200 straight away and hands the event to ``on_event``,
 so slow Discord API calls never make IPS time out and retry.
@@ -24,6 +24,7 @@ from aiohttp import web
 log = logging.getLogger(__name__)
 
 EventCallback = Callable[[str, Any], None]
+HealthCallback = Callable[[], dict[str, Any]]
 
 _REDACTED_HEADERS = {"authorization", "cookie", "x-api-key"}
 # IPS 5 sends e.g. "Webhook-Event: blogEntry_create"; the body is the bare content object
@@ -56,6 +57,7 @@ class WebhookServer:
         on_event: EventCallback,
         capture_dir: Path | None = None,
         capture_keep: int = 50,
+        health: HealthCallback | None = None,
     ) -> None:
         if len(secret) < 16:
             raise ValueError("WEBHOOK_SECRET must be at least 16 characters")
@@ -63,6 +65,7 @@ class WebhookServer:
         self._on_event = on_event
         self._capture_dir = capture_dir
         self._capture_keep = capture_keep
+        self._health_report = health
         self._runner: web.AppRunner | None = None
         self.app = self._build_app()
 
@@ -111,7 +114,12 @@ class WebhookServer:
             self._runner = None
 
     async def _health(self, request: web.Request) -> web.Response:
-        return web.json_response({"status": "ok"})
+        """Used by Docker's HEALTHCHECK and optionally an Uptime Kuma HTTP monitor. Problems with outside
+        services are reported in the body but don't fail the check: the bot itself is still working."""
+        if self._health_report is None:
+            return web.json_response({"status": "ok"})
+        report = self._health_report()
+        return web.json_response(report, status=200 if report["discord"]["connected"] else 503)
 
     async def _receive(self, request: web.Request) -> web.Response:
         if not hmac.compare_digest(request.match_info["secret"].encode(), self._secret):
