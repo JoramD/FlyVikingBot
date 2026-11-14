@@ -7,6 +7,7 @@ import unicodedata
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 from .services.fsairlines import Pilot, Rank
 from .storage import Link
@@ -46,6 +47,21 @@ def names_match(pilot: Pilot, website_name: str | None) -> bool:
         return False
     candidates = {pilot.user, pilot.callsign, pilot.full_name, pilot.name, f"{pilot.surname or ''} {pilot.name or ''}"}
     return any(_compact(c) == target for c in candidates if _compact(c))
+
+
+def find_discord_members(members: Iterable[Any], entered: str | None) -> list[int]:
+    """IDs of server members matching a typed Discord username: the exact username first (case-insensitive;
+    Discord usernames are lowercase but members may type capitals), else display name or nickname."""
+    members = list(members)
+    username = (entered or "").strip().casefold()
+    if not username:
+        return []
+    if exact := [m.id for m in members if m.name.casefold() == username]:
+        return exact
+    wanted = normalize(entered)
+    return [
+        m.id for m in members if wanted in {normalize(m.global_name), normalize(m.nick), normalize(m.display_name)}
+    ]
 
 
 # --- link decisions ------------------------------------------------------------

@@ -29,6 +29,13 @@ MEMBER_CACHE_SECONDS = 60  # one member scan serves all on-demand lookups within
 CATEGORY_SEPARATOR = " › "
 
 
+class WebsiteNotFound(ServiceError):
+    """The requested item (e.g. a member) doesn't exist (any more)."""
+
+
+NOT_FOUND_ERRORS = {"INVALID_ID", "NO_MEMBER", "NOT_FOUND"}  # IPS errorMessage values for a missing item
+
+
 def category_path(categories: dict[int, tuple[str, int | None]], category_id: int) -> str | None:
     """'Paints › FlyViking' for a subcategory: its parents' names, top first. None if the ID is unknown."""
     names: list[str] = []
@@ -63,12 +70,15 @@ class WebsiteClient:
     async def _get(self, endpoint: str, **params: Any) -> Any:
         return await self._request("GET", endpoint, params)
 
-    async def _request(self, method: str, endpoint: str, params: dict[str, Any], data: Any = None) -> Any:
+    async def _request(
+        self, method: str, endpoint: str, params: dict[str, Any], data: Any = None, *, expect_object: bool = True
+    ) -> Any:
         data = await request_json(self._session, method, self.build_url(endpoint, **params), data=data)
-        if not isinstance(data, dict):
+        if isinstance(data, dict) and "errorCode" in data:
+            error = f"Website API error {data.get('errorCode')}: {data.get('errorMessage')}"
+            raise (WebsiteNotFound if data.get("errorMessage") in NOT_FOUND_ERRORS else ServiceError)(error)
+        if expect_object and not isinstance(data, dict):
             raise ServiceError(f"Website returned unexpected data for {endpoint}")
-        if "errorCode" in data:
-            raise ServiceError(f"Website API error {data.get('errorCode')}: {data.get('errorMessage')}")
         return data
 
     async def search_files(self, query: str) -> FileSearchResult:
@@ -150,8 +160,24 @@ class WebsiteClient:
                 return
 
     async def get_member(self, member_id: int) -> dict[str, Any]:
-        """A member object (groups, profile fields, profileUrl, ...)."""
+        """A member object (groups, profile fields, profileUrl, validating, ...). WebsiteNotFound if deleted."""
         return await self._get(f"/core/members/{member_id}")
+
+    async def recent_members(self, joined_after: int, per_page: int = 100) -> list[dict[str, Any]]:
+        """Members who joined after a unix timestamp, newest first (one page is plenty for new registrations)."""
+        data = await self._get(
+            "/core/members", sortBy="joined", sortDir="desc", joined_after=joined_after, perPage=per_page
+        )
+        results = data.get("results")
+        return [r for r in results if isinstance(r, dict)] if isinstance(results, list) else []
+
+    async def validate_member(self, member_id: int) -> dict[str, Any]:
+        """Mark a member's account as validated (approves a registration waiting for an admin)."""
+        return await self._request("POST", f"/core/members/{member_id}", {}, data=[("validated", "1")])
+
+    async def delete_member(self, member_id: int) -> None:
+        """Delete a member account. IPS may answer with an empty body, so only errors count."""
+        await self._request("DELETE", f"/core/members/{member_id}", {}, expect_object=False)
 
     async def update_member_groups(
         self, member_id: int, *, primary: int | None = None, secondary: list[int] | None = None

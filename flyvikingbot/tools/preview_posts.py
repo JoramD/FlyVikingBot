@@ -29,6 +29,7 @@ from typing import Any
 import discord
 
 from ..cogs.flight_logs import flight_log_message
+from ..cogs.registrations import registration_message
 from ..cogs.website_events import announcement_message, file_message, gallery_message
 from ..config import ConfigError, load_settings
 from ..services.fsairlines import FlightLog
@@ -106,6 +107,15 @@ def _flight_log(ctx: Context) -> dict[str, Any]:
     return flight_log_message(flight, ctx.mention)
 
 
+def _registration(ctx: Context) -> dict[str, Any]:
+    # The real post also pings @Board of Directors and has Approve/Reject buttons; previews have neither
+    reg = ev.Registration(
+        member_id=0, name="SamplePilot", profile_url=f"{ctx.site}/profile/0-samplepilot/", joined=NOW,
+        validating=True, completed=True, fsa_pilot_id="FVK000", discord_name="samplepilot",
+    )
+    return registration_message(reg)
+
+
 # name -> (the real builder, a function that calls it with sample data)
 PREVIEWS: dict[str, tuple[Callable[..., dict[str, Any]], Callable[[Context], dict[str, Any]]]] = {
     "announcement": (announcement_message, _announcement),
@@ -113,6 +123,7 @@ PREVIEWS: dict[str, tuple[Callable[..., dict[str, Any]], Callable[[Context], dic
     "new_version": (file_message, lambda ctx: _file(ctx, new_version=True)),
     "gallery": (gallery_message, _gallery),
     "flight_log": (flight_log_message, _flight_log),
+    "registration": (registration_message, _registration),
 }
 
 

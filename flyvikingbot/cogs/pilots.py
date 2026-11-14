@@ -164,18 +164,7 @@ class Pilots(commands.Cog):
     # --- linking ------------------------------------------------------------------------------------------------------
 
     def find_discord_members(self, guild: discord.Guild, entered: str) -> list[int]:
-        username = (entered or "").strip().casefold()  # Discord usernames are lowercase; members may type capitals
-        if not username:
-            return []
-        exact = [m.id for m in guild.members if m.name.casefold() == username]
-        if exact:
-            return exact
-        wanted = lk.normalize(entered)
-        return [
-            m.id
-            for m in guild.members
-            if wanted in {lk.normalize(m.global_name), lk.normalize(m.nick), lk.normalize(m.display_name)}
-        ]
+        return lk.find_discord_members(guild.members, entered)
 
     @commands.Cog.listener()
     async def on_ips_webhook(self, event: str, payload: Any) -> None:

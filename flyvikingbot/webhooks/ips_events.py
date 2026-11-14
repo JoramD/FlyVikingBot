@@ -23,7 +23,8 @@ DOWNLOADS_NEW_VERSION = "downloads_new_version"
 
 MEMBER_EDITED = "member_edited"
 MEMBER_REGISTRATION_COMPLETE = "member_registration_complete"
-MEMBER_EVENTS = frozenset({MEMBER_EDITED, MEMBER_REGISTRATION_COMPLETE})
+MEMBER_CREATE = "member_create"
+MEMBER_EVENTS = frozenset({MEMBER_EDITED, MEMBER_REGISTRATION_COMPLETE, MEMBER_CREATE})
 
 
 _IMG_SRC = re.compile(r"<img[^>]+src=[\"']([^\"']+)[\"']", re.IGNORECASE)
@@ -266,6 +267,44 @@ def parse_member_profile(
         member_id=member_id,
         name=_str(data.get("name")),
         profile_url=_str(data.get("profileUrl")),
+        fsa_pilot_id=custom_field(data, fsa_field_id),
+        discord_name=custom_field(data, discord_field_id),
+    )
+
+
+@dataclass(frozen=True)
+class Registration:
+    """A website member as far as registration approval is concerned."""
+
+    member_id: int
+    name: str
+    profile_url: str | None
+    joined: datetime | None
+    validating: bool  # the account isn't validated yet (waiting for email confirmation and/or an admin)
+    completed: bool  # registration finished (IPS can create accounts before all steps are done)
+    fsa_pilot_id: str | None = None  # optional at registration; often empty
+    discord_name: str | None = None
+
+    @property
+    def awaiting_approval(self) -> bool:
+        return self.validating and self.completed
+
+
+def parse_registration(
+    payload: Any, fsa_field_id: int | None = None, discord_field_id: int | None = None
+) -> Registration | None:
+    """A member object (or member event) as a Registration. None without an ID or name."""
+    data = unwrap(payload)
+    member_id, name = _int(data.get("id")), _str(data.get("name"))
+    if member_id is None or not name:
+        return None
+    return Registration(
+        member_id=member_id,
+        name=name,
+        profile_url=_str(data.get("profileUrl")),
+        joined=_date(data.get("joined")),
+        validating=data.get("validating") is True,
+        completed=data.get("completed") is not False,  # missing: assume finished
         fsa_pilot_id=custom_field(data, fsa_field_id),
         discord_name=custom_field(data, discord_field_id),
     )

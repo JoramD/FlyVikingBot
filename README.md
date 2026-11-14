@@ -29,6 +29,15 @@ Discord bot for the FlyViking virtual airline, connecting [flyviking.net](https:
 | `blogEntry_create` | `@everyone` announcement embed in #announcements (excerpt, image, blog category); only for the blog in `ANNOUNCEMENT_BLOG_ID` |
 | `downloadsFile_create` | "New file available" embed in #announcements (author, description, screenshot, category, version); "· by @member" is added when the author is linked |
 | `downloads_new_version` | "New version available" embed in #announcements, the same as a new file plus the changelog |
+| `member_create`, `member_registration_complete` | New registrations awaiting approval in #system-messages (see below; also found by a 15-minute poll) |
+
+**Registration approvals** (optional, `REGISTRATION_APPROVALS=true`): new flyviking.net registrations that wait for approval are posted to #system-messages with a @Board of Directors ping.
+- **Approve** validates the account on the website.
+- **Reject** asks for confirmation, then deletes the account.
+- The post shows the username, profile link and registration time. If the member already filled in their FSAirlines Pilot ID or Discord username, those are shown too; a Discord username that matches a server member is tagged.
+- If an admin approves or deletes the account in the ACP instead, the post is updated to match.
+- If the website refuses an approval or deletion, the post keeps its buttons and staff get a link to the ACP's validation queue.
+- New registrations are found through the member webhooks and a poll every 15 minutes, which also catches anything missed while the bot was offline.
 
 **Monitoring:** Uptime Kuma push heartbeat every 60 s.
 
@@ -85,7 +94,8 @@ Everything the bot needs outside this repository, in one place. Details follow i
   - `GET /downloads/categories` (full category path such as "Paints › FlyViking" in file posts and `/file_lookup`; without it only the subcategory is shown)
   - `GET /core/members` (on-demand linking)
   - `GET /core/groups`, `GET /core/members/{id}` and `POST /core/members/{id}` (website rank groups)
-- [ ] Webhooks (one per event) to `http://flyviking-bot:8080/ips/<WEBHOOK_SECRET>/<event>`: `galleryImage_create`, `blogEntry_create`, `downloadsFile_create`, `downloads_new_version` and `member_edited`.
+  - `DELETE /core/members/{id}` (registration approvals: Reject)
+- [ ] Webhooks (one per event) to `http://flyviking-bot:8080/ips/<WEBHOOK_SECRET>/<event>`: `galleryImage_create`, `blogEntry_create`, `downloadsFile_create`, `downloads_new_version` and `member_edited`. For registration approvals, also add `member_create` and `member_registration_complete`.
 - [ ] Two member-editable profile fields: **FSAirlines Pilot ID** (text; regex `/^\s*(?:FVK\d{3,}|\d+)\s*$/i`) and **Discord Username**. Their IDs go in `IPS_FIELD_FSA_PILOT_ID` / `IPS_FIELD_DISCORD_NAME`.
 - [ ] Optional: a **FlyViking rank** profile field (text, *not* editable by members, shown on profiles and optionally in posts). Its ID goes in `IPS_FIELD_FSA_RANK`.
 - [ ] Secondary member groups named like the rank roles, and a **Members** group.
@@ -170,7 +180,7 @@ flyvikingbot/
   storage.py          SQLite (data/flyviking.db): account links and small bot state
   linking.py          pure link-decision and rank-role logic
   system_messages.py  #system-messages helpers: staff check and the persistent Completed button
-  cogs/               one module per feature (airline, website, admin, status, website_events, flight_logs, pilots, weather)
+  cogs/               one module per feature (airline, website, admin, status, website_events, flight_logs, pilots, weather, registrations)
   services/           async API clients (FSAirlines, Invision Community, SayIntentions)
   webhooks/           webhook HTTP receiver and IPS payload parsing
   tools/              maintenance scripts (fsa_sample, si_sample, preview_posts)

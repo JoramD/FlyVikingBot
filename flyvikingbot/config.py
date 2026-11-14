@@ -51,6 +51,7 @@ class Settings:
     website_rank_sync: bool  # also mirror ranks to website groups (needs member-edit API permission)
     website_member_group: str  # primary group for pilots on an automatic rank
     website_protected_groups: tuple[str, ...]  # primary groups the bot never changes
+    registration_approvals: bool  # post registrations awaiting approval to #system-messages with Approve/Reject
 
     # SayIntentions.AI (/weather is off unless both the app key and the account key are set)
     sayintentions_app_key: str | None  # identifies this bot as an application (sent as X-Developer-Key)
@@ -143,6 +144,7 @@ def load_settings(
         fsa_rank_roles=tuple(
             name.strip() for name in (get("FSA_RANK_ROLES") or "").split(",") if name.strip()
         ),
+        registration_approvals=_bool(get("REGISTRATION_APPROVALS", "false")),
         sayintentions_app_key=get("SAYINTENTIONS_APP_KEY"),
         sayintentions_account_key=get("SAYINTENTIONS_ACCOUNT_KEY"),
         sayintentions_va_key=get("SAYINTENTIONS_VA_KEY"),

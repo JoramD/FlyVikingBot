@@ -31,6 +31,7 @@ EXTENSIONS = (
     "flyvikingbot.cogs.flight_logs",
     "flyvikingbot.cogs.pilots",
     "flyvikingbot.cogs.weather",
+    "flyvikingbot.cogs.registrations",
 )
 
 
