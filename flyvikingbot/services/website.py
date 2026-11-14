@@ -11,7 +11,7 @@ from urllib.parse import urlencode
 import aiohttp
 from yarl import URL
 
-from .http import ServiceError, request_json
+from .http import ServiceError, ServiceHealth, request_json
 
 
 @dataclass
@@ -49,6 +49,7 @@ class WebsiteClient:
         self._base_url = base_url
         self._api_key = api_key
         self._categories: tuple[float, dict[int, tuple[str, int | None]]] | None = None
+        self.health = ServiceHealth("Website")
         self._members: tuple[float, list[dict[str, Any]]] | None = None
 
     def build_url(self, endpoint: str, **params: Any) -> URL:
@@ -64,7 +65,9 @@ class WebsiteClient:
         return await self._request("GET", endpoint, params)
 
     async def _request(self, method: str, endpoint: str, params: dict[str, Any], data: Any = None) -> Any:
-        data = await request_json(self._session, method, self.build_url(endpoint, **params), data=data)
+        data = await request_json(
+            self._session, method, self.build_url(endpoint, **params), data=data, health=self.health
+        )
         if not isinstance(data, dict):
             raise ServiceError(f"Website returned unexpected data for {endpoint}")
         if "errorCode" in data:

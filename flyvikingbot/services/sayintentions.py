@@ -15,7 +15,7 @@ from typing import Any
 
 import aiohttp
 
-from .http import ServiceError, get_json
+from .http import ServiceError, ServiceHealth, get_json
 
 log = logging.getLogger(__name__)
 
@@ -126,12 +126,14 @@ class SayIntentionsClient:
         self._account_key = account_key
         self._api_url = api_url
         self._weather_cache: dict[str, tuple[float, AirportWeather]] = {}
+        self.health = ServiceHealth("SayIntentions")
 
     async def call(self, endpoint: str, **params: Any) -> Any:
         """GET a SAPI endpoint and return the decoded JSON as-is."""
         query = {"api_key": self._account_key, **{k: v for k, v in params.items() if v is not None}}
         return await get_json(
-            self._session, self._api_url + endpoint, params=query, headers={"X-Developer-Key": self._app_key}
+            self._session, self._api_url + endpoint, params=query, headers={"X-Developer-Key": self._app_key},
+            health=self.health,
         )
 
     async def weather(self, icaos: list[str]) -> dict[str, AirportWeather]:
